@@ -133,6 +133,8 @@ class AccountMove(models.Model):
             })
 
         if new_flags:
+            for vals in new_flags:
+                vals['company_id'] = self.company_id.id
             created = self.env['vendorguard.fraud.flag'].create(new_flags)
             return (
                 "VendorGuard blocked this bill from %s — %d new issue(s) found:\n%s\n\n"
@@ -175,7 +177,7 @@ class AccountMove(models.Model):
             return
         self.env['vendorguard.fraud.flag'].create({
             'flag_type': 'ghost_vendor', 'severity': 'medium', 'state': 'flagged',
-            'partner_id': partner.id, 'resolvable': False,
+            'partner_id': partner.id, 'resolvable': False, 'company_id': self.company_id.id,
             'description': (
                 "Vendor %s has posted bills but no tax ID (VAT) and no bank account on file — "
                 "a common pattern for fake/shell vendors set up to receive a single payment."

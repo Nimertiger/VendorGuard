@@ -62,6 +62,7 @@ class PurchaseOrder(models.Model):
             self.env['vendorguard.fraud.flag'].create({
                 'flag_type': 'structuring', 'severity': 'high', 'state': 'flagged',
                 'partner_id': self.partner_id.id, 'purchase_order_id': self.id,
+                'company_id': self.company_id.id,
                 'amount': total, 'resolvable': False,
                 'description': (
                     "Vendor %s has %d purchase orders totalling %.2f within the last %d days, "

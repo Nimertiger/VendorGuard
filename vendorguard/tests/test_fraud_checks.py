@@ -362,6 +362,31 @@ class TestFraudChecks(TransactionCase):
 
     # --- trust score computation ---
 
+    # --- multi-company scoping ---
+
+    def test_flag_company_id_matches_source_document(self):
+        vendor = self._make_vendor('VG Company Scope Vendor')
+        move = self._post_bill(vendor, 100.0, 'COMP-001')
+        flag = self.env['vendorguard.fraud.flag'].search([('move_id', '=', move.id)], limit=1)
+        self.assertEqual(flag.company_id, move.company_id)
+
+    def test_flag_invisible_across_companies(self):
+        other_company = self.env['res.company'].create({'name': 'VG Other Company'})
+        vendor = self._make_vendor('VG Cross Company Vendor')
+        flag = self.env['vendorguard.fraud.flag'].create({
+            'flag_type': 'ghost_vendor', 'severity': 'medium', 'state': 'flagged',
+            'partner_id': vendor.id, 'resolvable': False, 'description': 'x',
+            'company_id': other_company.id,
+        })
+        cross_company_user = self.env['res.users'].create({
+            'name': 'VG Cross Company User', 'login': 'vg_cross_company_user',
+            'company_ids': [(6, 0, self.env.company.ids)],
+            'company_id': self.env.company.id,
+        })
+        visible = self.env['vendorguard.fraud.flag'].with_user(cross_company_user).search(
+            [('id', '=', flag.id)])
+        self.assertFalse(visible, "a flag in another company must not be visible")
+
     def test_trust_score_starts_at_100_with_no_flags(self):
         vendor = self._make_vendor('VG Clean Vendor')
         self.assertEqual(vendor.trust_score, 100)

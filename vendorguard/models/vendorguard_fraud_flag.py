@@ -34,6 +34,7 @@ class VendorguardFraudFlag(models.Model):
     partner_id = fields.Many2one('res.partner', required=True, tracking=True)
     move_id = fields.Many2one('account.move', string='Vendor Bill')
     purchase_order_id = fields.Many2one('purchase.order', string='Purchase Order')
+    company_id = fields.Many2one('res.company', required=True, default=lambda self: self.env.company)
     currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id)
     amount = fields.Monetary(currency_field='currency_id')
     description = fields.Text()
