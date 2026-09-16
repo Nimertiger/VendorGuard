@@ -50,6 +50,7 @@ class PurchaseOrder(models.Model):
         window_start = ref_date - relativedelta(days=STRUCTURING_WINDOW_DAYS)
         siblings = self.env['purchase.order'].search([
             ('partner_id', '=', self.partner_id.id),
+            ('company_id', '=', self.company_id.id),
             ('state', '=', 'purchase'),
             ('date_order', '>=', window_start),
             ('date_order', '<=', ref_date),

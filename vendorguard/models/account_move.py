@@ -22,6 +22,7 @@ class AccountMove(models.Model):
                 continue
             domain = [
                 ('id', '!=', move.id),
+                ('company_id', '=', move.company_id.id),
                 ('move_type', '=', move.move_type),
                 ('partner_id', '=', move.partner_id.id),
                 ('ref', '=', move.ref),
