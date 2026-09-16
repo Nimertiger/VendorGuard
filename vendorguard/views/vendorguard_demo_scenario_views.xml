@@ -1,0 +1,28 @@
+<odoo>
+    <record id="vendorguard_demo_scenario_view_form" model="ir.ui.view">
+        <field name="name">vendorguard.demo.scenario.view.form</field>
+        <field name="model">vendorguard.demo.scenario</field>
+        <field name="arch" type="xml">
+            <form>
+                <p>Load (or reset) the VendorGuard demo scenario: a vendor with a recent bank-account
+                   swap, a pending large payment, a near-threshold purchase order, a three-way-match
+                   mismatch ready to block on Confirm, a second vendor sharing its bank account, and
+                   two vendors seeded with synthetic bill history for the Benford's Law and
+                   chi-square statistical audit. Safe to run repeatedly — it always resets to a
+                   clean, demoable state.</p>
+                <footer>
+                    <button name="action_load_demo_scenario" type="object"
+                            string="Load Demo Scenario" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="vendorguard_demo_scenario_action" model="ir.actions.act_window">
+        <field name="name">Load Demo Scenario</field>
+        <field name="res_model">vendorguard.demo.scenario</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

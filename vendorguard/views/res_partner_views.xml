@@ -1,0 +1,67 @@
+<odoo>
+    <record id="res_partner_view_form_inherit_vendorguard" model="ir.ui.view">
+        <field name="name">res.partner.form.inherit.vendorguard</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Vendor Risk" name="vendorguard_risk">
+                    <group>
+                        <group>
+                            <field name="trust_score" widget="progressbar"/>
+                            <field name="trust_tier" widget="badge"
+                                   decoration-success="trust_tier == 'safe'"
+                                   decoration-warning="trust_tier == 'watch'"
+                                   decoration-danger="trust_tier == 'high_risk'"/>
+                        </group>
+                    </group>
+                    <button name="action_run_benford_audit" type="object"
+                            string="Run Statistical Audit" class="btn-secondary"/>
+                    <separator string="Bank Account Change History"/>
+                    <field name="bank_change_log_ids" readonly="1">
+                        <list>
+                            <field name="change_date"/>
+                            <field name="old_acc_number"/>
+                            <field name="new_acc_number"/>
+                        </list>
+                    </field>
+                    <separator string="Fraud Flags"/>
+                    <field name="fraud_flag_ids" readonly="1">
+                        <list decoration-danger="severity in ('critical','high')"
+                              decoration-warning="severity == 'medium'">
+                            <field name="create_date"/>
+                            <field name="flag_type"/>
+                            <field name="severity"/>
+                            <field name="amount"/>
+                            <field name="state"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="res_partner_view_list_inherit_vendorguard" model="ir.ui.view">
+        <field name="name">res.partner.list.inherit.vendorguard</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="decoration-danger">trust_tier == 'high_risk'</attribute>
+                <attribute name="decoration-warning">trust_tier == 'watch'</attribute>
+            </xpath>
+            <xpath expr="//field[@name='display_name']" position="after">
+                <field name="trust_score" optional="show"/>
+                <field name="trust_tier" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="vendorguard_vendors_at_risk_action" model="ir.actions.act_window">
+        <field name="name">Vendors at Risk</field>
+        <field name="res_model">res.partner</field>
+        <field name="view_mode">list,kanban,form</field>
+        <field name="domain">[('is_company','=',True),('supplier_rank','&gt;',0)]</field>
+        <field name="context">{'search_default_filter_to_invoice': 0}</field>
+    </record>
+</odoo>

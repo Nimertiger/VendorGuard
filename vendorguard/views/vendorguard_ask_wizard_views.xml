@@ -1,0 +1,25 @@
+<odoo>
+    <record id="vendorguard_ask_wizard_view_form" model="ir.ui.view">
+        <field name="name">vendorguard.ask.wizard.view.form</field>
+        <field name="model">vendorguard.ask.wizard</field>
+        <field name="arch" type="xml">
+            <form>
+                <group>
+                    <field name="question" placeholder="e.g. who is the riskiest vendor?"/>
+                    <field name="answer" readonly="1"/>
+                </group>
+                <footer>
+                    <button name="action_ask" type="object" string="Ask" class="btn-primary"/>
+                    <button string="Close" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="vendorguard_ask_wizard_action" model="ir.actions.act_window">
+        <field name="name">Ask VendorGuard</field>
+        <field name="res_model">vendorguard.ask.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.pot
+*.swp
+.DS_Store
+*.log

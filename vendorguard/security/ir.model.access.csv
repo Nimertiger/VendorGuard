@@ -1,0 +1,7 @@
+id,name,model_id/id,group_id/id,perm_read,perm_write,perm_create,perm_unlink
+access_vendorguard_fraud_flag_user,vendorguard.fraud.flag.user,model_vendorguard_fraud_flag,base.group_user,1,0,1,0
+access_vendorguard_fraud_flag_manager,vendorguard.fraud.flag.manager,model_vendorguard_fraud_flag,group_finance_manager,1,1,1,1
+access_vendorguard_bank_change_log_user,vendorguard.bank.change.log.user,model_vendorguard_bank_change_log,base.group_user,1,0,0,0
+access_vendorguard_bank_change_log_manager,vendorguard.bank.change.log.manager,model_vendorguard_bank_change_log,group_finance_manager,1,1,1,1
+access_vendorguard_demo_scenario_user,vendorguard.demo.scenario.user,model_vendorguard_demo_scenario,base.group_user,1,1,1,1
+access_vendorguard_ask_wizard_user,vendorguard.ask.wizard.user,model_vendorguard_ask_wizard,base.group_user,1,1,1,1

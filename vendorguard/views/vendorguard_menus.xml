@@ -1,0 +1,23 @@
+<odoo>
+    <menuitem id="vendorguard_menu_root" name="VendorGuard" sequence="10"/>
+
+    <menuitem id="vendorguard_menu_dashboard" name="Dashboard"
+              parent="vendorguard_menu_root"
+              action="vendorguard_fraud_flag_dashboard_action" sequence="10"/>
+
+    <menuitem id="vendorguard_menu_fraud_flags" name="Fraud Flags"
+              parent="vendorguard_menu_root"
+              action="vendorguard_fraud_flag_action" sequence="20"/>
+
+    <menuitem id="vendorguard_menu_vendors_at_risk" name="Vendors at Risk"
+              parent="vendorguard_menu_root"
+              action="vendorguard_vendors_at_risk_action" sequence="30"/>
+
+    <menuitem id="vendorguard_menu_demo_scenario" name="Load Demo Scenario"
+              parent="vendorguard_menu_root"
+              action="vendorguard_demo_scenario_action" sequence="40"/>
+
+    <menuitem id="vendorguard_menu_ask_wizard" name="Ask VendorGuard"
+              parent="vendorguard_menu_root"
+              action="vendorguard_ask_wizard_action" sequence="50"/>
+</odoo>

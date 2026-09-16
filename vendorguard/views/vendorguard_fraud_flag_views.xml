@@ -1,0 +1,137 @@
+<odoo>
+    <record id="vendorguard_fraud_flag_view_list" model="ir.ui.view">
+        <field name="name">vendorguard.fraud.flag.view.list</field>
+        <field name="model">vendorguard.fraud.flag</field>
+        <field name="arch" type="xml">
+            <list decoration-danger="severity in ('critical','high')"
+                  decoration-warning="severity == 'medium'"
+                  decoration-info="severity == 'low'">
+                <field name="create_date"/>
+                <field name="flag_type"/>
+                <field name="severity"/>
+                <field name="partner_id"/>
+                <field name="move_id"/>
+                <field name="purchase_order_id"/>
+                <field name="amount"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="vendorguard_fraud_flag_view_form" model="ir.ui.view">
+        <field name="name">vendorguard.fraud.flag.view.form</field>
+        <field name="model">vendorguard.fraud.flag</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_approve" type="object" string="Approve"
+                            class="btn-primary"
+                            invisible="not resolvable or state not in ('flagged','pending_review')"
+                            groups="vendorguard.group_finance_manager"/>
+                    <button name="action_reject" type="object" string="Reject"
+                            invisible="not resolvable or state not in ('flagged','pending_review')"
+                            groups="vendorguard.group_finance_manager"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="flagged,pending_review,approved,rejected"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="flag_type"/>
+                            <field name="severity"/>
+                            <field name="partner_id"/>
+                            <field name="resolvable"/>
+                        </group>
+                        <group>
+                            <field name="move_id"/>
+                            <field name="purchase_order_id"/>
+                            <field name="amount"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <field name="description"/>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="vendorguard_fraud_flag_view_kanban" model="ir.ui.view">
+        <field name="name">vendorguard.fraud.flag.view.kanban</field>
+        <field name="model">vendorguard.fraud.flag</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state">
+                <templates>
+                    <t t-name="card">
+                        <div class="oe_kanban_card">
+                            <strong><field name="partner_id"/></strong>
+                            <div><field name="flag_type"/></div>
+                            <div><field name="severity"/></div>
+                            <div><field name="amount"/></div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="vendorguard_fraud_flag_view_pivot" model="ir.ui.view">
+        <field name="name">vendorguard.fraud.flag.view.pivot</field>
+        <field name="model">vendorguard.fraud.flag</field>
+        <field name="arch" type="xml">
+            <pivot>
+                <field name="partner_id" type="row"/>
+                <field name="flag_type" type="col"/>
+                <field name="amount" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="vendorguard_fraud_flag_view_graph" model="ir.ui.view">
+        <field name="name">vendorguard.fraud.flag.view.graph</field>
+        <field name="model">vendorguard.fraud.flag</field>
+        <field name="arch" type="xml">
+            <graph>
+                <field name="flag_type"/>
+                <field name="amount" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="vendorguard_fraud_flag_view_search" model="ir.ui.view">
+        <field name="name">vendorguard.fraud.flag.view.search</field>
+        <field name="model">vendorguard.fraud.flag</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="partner_id"/>
+                <field name="flag_type"/>
+                <filter string="Unresolved" name="unresolved"
+                        domain="[('state', 'in', ('flagged', 'pending_review'))]"/>
+                <filter string="Critical" name="critical" domain="[('severity', '=', 'critical')]"/>
+                <filter string="High" name="high" domain="[('severity', '=', 'high')]"/>
+                <separator/>
+                <filter string="Approved" name="approved" domain="[('state', '=', 'approved')]"/>
+                <filter string="Rejected" name="rejected" domain="[('state', '=', 'rejected')]"/>
+                <group>
+                    <filter string="Flag Type" name="group_flag_type" context="{'group_by': 'flag_type'}"/>
+                    <filter string="Vendor" name="group_partner" context="{'group_by': 'partner_id'}"/>
+                    <filter string="Severity" name="group_severity" context="{'group_by': 'severity'}"/>
+                    <filter string="State" name="group_state" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="vendorguard_fraud_flag_action" model="ir.actions.act_window">
+        <field name="name">Fraud Flags</field>
+        <field name="res_model">vendorguard.fraud.flag</field>
+        <field name="view_mode">list,kanban,form</field>
+        <field name="context">{'search_default_unresolved': 1}</field>
+    </record>
+
+    <record id="vendorguard_fraud_flag_dashboard_action" model="ir.actions.act_window">
+        <field name="name">Dashboard</field>
+        <field name="res_model">vendorguard.fraud.flag</field>
+        <field name="view_mode">pivot,graph</field>
+    </record>
+</odoo>
