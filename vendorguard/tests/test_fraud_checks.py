@@ -132,6 +132,21 @@ class TestFraudChecks(TransactionCase):
                           "the second swap must produce its own flag, not be silently covered "
                           "by the first (already-approved) one")
 
+        # and the inverse failure mode: with the second swap now reviewed and nothing new
+        # having happened, a further retry must NOT spuriously create a third flag. An
+        # earlier version of this fix compared timestamps from two different clocks
+        # (Python's fields.Datetime.now() for change_date vs. Postgres's NOW() for
+        # create_date) to decide "already covered," which broke exactly this case under
+        # same-second writes -- the fix now links each flag to the specific bank-change-log
+        # row it covers instead of comparing timestamps at all.
+        all_bank_swap_flags.with_user(self.manager_user).action_approve()
+        move.with_user(self.manager_user).action_post()
+        self.assertEqual(move.state, 'posted', "nothing new and everything approved must finally post")
+        final_bank_swap_flags = self.env['vendorguard.fraud.flag'].search([
+            ('move_id', '=', move.id), ('flag_type', '=', 'bank_swap')])
+        self.assertEqual(len(final_bank_swap_flags), 2,
+                          "a no-op retry must not spuriously create a third flag")
+
     # --- segregation_of_duties ---
 
     def test_segregation_of_duties_flag(self):

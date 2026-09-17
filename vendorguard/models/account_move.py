@@ -97,19 +97,21 @@ class AccountMove(models.Model):
             ('company_id', '=', self.company_id.id),
             ('change_date', '>=', fields.Datetime.now() - relativedelta(days=BANK_CHANGE_RECENT_DAYS)),
         ], limit=1, order='change_date desc')
-        # "already flagged" here means "a flag already covers *this* swap event," not just
-        # "a bank_swap flag exists at all" -- keying on flag_type alone let a bank swap that
-        # happened AFTER an earlier one was reviewed post through with no new flag, since a
-        # resolved flag from the first swap already satisfied the type-only check. Compare
-        # against when the event happened vs. when the most recent bank_swap flag was raised.
-        existing_bank_swap_flags = self.fraud_flag_ids.filtered(lambda f: f.flag_type == 'bank_swap')
-        already_covers_this_swap = recent_change and any(
-            f.create_date and f.create_date >= recent_change.change_date
-            for f in existing_bank_swap_flags)
+        # "already flagged" here means "a flag already covers *this specific* change-log
+        # record," not just "a bank_swap flag exists at all" for this bill -- keying on
+        # flag_type alone let a bank swap that happened after an earlier one was reviewed
+        # post through with no new flag, since a resolved flag from the first swap already
+        # satisfied the type-only check. Link each flag to the exact log row it responds to
+        # (an id comparison) rather than comparing timestamps from two different clocks
+        # (Python's fields.Datetime.now() here vs. Postgres's NOW() for create_date), which
+        # is unreliable under same-second writes -- confirmed empirically during review.
+        already_covers_this_swap = recent_change and bool(self.fraud_flag_ids.filtered(
+            lambda f: f.flag_type == 'bank_swap' and f.bank_change_log_id == recent_change))
         if recent_change and not already_covers_this_swap:
             new_flags.append({
                 'flag_type': 'bank_swap', 'severity': 'critical', 'state': 'flagged',
                 'partner_id': self.partner_id.id, 'move_id': self.id,
+                'bank_change_log_id': recent_change.id,
                 'amount': self.amount_total, 'resolvable': True,
                 'description': (
                     "Bank account for %s changed on %s (old: %s, new: %s) within %d days of this bill."
