@@ -6,4 +6,5 @@ from . import res_partner_bank
 from . import account_move
 from . import purchase_order
 from . import vendorguard_demo_scenario
+from . import vendorguard_settings
 from . import vendorguard_ask_wizard

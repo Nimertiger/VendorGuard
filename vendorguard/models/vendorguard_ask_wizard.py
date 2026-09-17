@@ -1,17 +1,18 @@
-import re
+import logging
 
-from dateutil.relativedelta import relativedelta
+import requests
 
 from odoo import fields, models
 
-OPEN_STATES = ('flagged', 'pending_review')
+from .vendorguard_settings import API_KEY_PARAM
 
-# Generic corporate words stripped before matching a vendor name against a question, so a
-# partial mention ("Al Fahim") still matches the full legal name ("Al Fahim Trading LLC").
-_NAME_STOPWORDS = {
-    'llc', 'fze', 'ltd', 'inc', 'co', 'company', 'trading', 'consulting',
-    'supplies', 'logistics', 'manufacturing', 'group', 'corp', 'corporation',
-}
+_logger = logging.getLogger(__name__)
+
+OPEN_STATES = ('flagged', 'pending_review')
+ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
+ANTHROPIC_MODEL = 'claude-sonnet-5'
+ANTHROPIC_TIMEOUT = 20
+ANTHROPIC_MAX_TOKENS = 400
 
 
 class VendorguardAskWizard(models.TransientModel):
@@ -21,112 +22,26 @@ class VendorguardAskWizard(models.TransientModel):
     question = fields.Char()
     answer = fields.Text(readonly=True)
 
-    def _find_vendor_in_text(self, text):
-        question_tokens = set(re.findall(r'[a-z0-9]+', (text or '').lower()))
-        vendors = self.env['res.partner'].search([('supplier_rank', '>', 0)])
-        best, best_score = self.env['res.partner'], 0
-        for vendor in vendors:
-            if not vendor.name:
-                continue
-            name_tokens = set(re.findall(r'[a-z0-9]+', vendor.name.lower())) - _NAME_STOPWORDS
-            score = len(name_tokens & question_tokens)
-            if score > best_score:
-                best, best_score = vendor, score
-        return best
+    def _build_context_snapshot(self):
+        """Compact, factual snapshot of live vendor/flag data, handed to Claude as grounding
+        so it answers from real numbers instead of inventing vendor names or figures."""
+        partners = self.env['res.partner'].search(
+            [('supplier_rank', '>', 0)], order='trust_score asc')
+        if not partners:
+            return "No vendor or fraud-flag data loaded yet. Suggest running Load Demo Scenario."
+        lines = []
+        for partner in partners:
+            open_flags = partner.fraud_flag_ids.filtered(lambda f: f.state in OPEN_STATES)
+            lines.append("- %s: trust score %d (%s), %d open flag(s)" % (
+                partner.name, partner.trust_score, partner.trust_tier, len(open_flags)))
+            for flag in open_flags:
+                lines.append("    - [%s/%s] %s: %s" % (
+                    flag.severity.upper(), flag.state,
+                    dict(flag._fields['flag_type'].selection).get(flag.flag_type),
+                    flag.description or ''))
+        return "\n".join(lines)
 
-    def _flag_line(self, flag):
-        return "- [%s] %s on %s" % (
-            flag.severity.upper(),
-            dict(flag._fields['flag_type'].selection).get(flag.flag_type),
-            flag.partner_id.name)
-
-    def _snapshot(self):
-        Flag = self.env['vendorguard.fraud.flag']
-        riskiest = self.env['res.partner'].search(
-            [('supplier_rank', '>', 0)], order='trust_score asc', limit=1)
-        open_count = Flag.search_count([('state', 'in', OPEN_STATES)])
-        critical_count = Flag.search_count(
-            [('state', 'in', OPEN_STATES), ('severity', 'in', ('critical', 'high'))])
-        if not riskiest:
-            return "No vendor data yet — try Load Demo Scenario first."
-        return (
-            "There are %d open flag(s) right now (%d critical/high). The riskiest vendor is "
-            "%s at trust score %d (%s)."
-        ) % (open_count, critical_count, riskiest.name, riskiest.trust_score, riskiest.trust_tier)
-
-    def action_ask(self):
-        self.ensure_one()
-        q = (self.question or '').strip()
-        ql = q.lower()
-        Flag = self.env['vendorguard.fraud.flag']
-        vendor = self._find_vendor_in_text(q)
-
-        if not q:
-            self.answer = self._snapshot()
-
-        elif 'riskiest' in ql or 'highest risk' in ql or 'highest-risk' in ql:
-            partner = self.env['res.partner'].search(
-                [('supplier_rank', '>', 0)], order='trust_score asc', limit=1)
-            if partner:
-                open_flags = partner.fraud_flag_ids.filtered(lambda f: f.state in OPEN_STATES)
-                self.answer = (
-                    "The riskiest vendor right now is %s, with a trust score of %d (%s). "
-                    "They have %d unresolved fraud flag(s)."
-                ) % (partner.name, partner.trust_score, partner.trust_tier, len(open_flags))
-            else:
-                self.answer = "No vendors with a computed trust score yet."
-
-        elif vendor and ('safe' in ql or 'risky' in ql or 'trust' in ql):
-            open_flags = vendor.fraud_flag_ids.filtered(lambda f: f.state in OPEN_STATES)
-            self.answer = "%s has a trust score of %d (%s), with %d open flag(s)." % (
-                vendor.name, vendor.trust_score, vendor.trust_tier, len(open_flags))
-
-        elif 'critical' in ql or 'high risk flags' in ql or ('show' in ql and 'flag' in ql):
-            flags = Flag.search([
-                ('state', 'in', OPEN_STATES), ('severity', 'in', ('critical', 'high')),
-            ], limit=8)
-            if flags:
-                self.answer = "Open critical/high flags:\n" + "\n".join(
-                    self._flag_line(f) for f in flags)
-            else:
-                self.answer = "No open critical or high severity flags right now."
-
-        elif 'how many' in ql and 'flag' in ql:
-            count = Flag.search_count([('state', 'in', OPEN_STATES)])
-            self.answer = "There are %d open fraud flag(s) right now." % count
-
-        elif 'blocked' in ql or ('flag' in ql and ('today' in ql or 'this week' in ql)):
-            days = 7 if 'week' in ql else 1
-            since = fields.Datetime.now() - relativedelta(days=days)
-            domain = [('create_date', '>=', since)]
-            total = Flag.search_count(domain)
-            if total:
-                period = 'today' if days == 1 else 'this week'
-                shown = Flag.search(domain, limit=8)
-                more = "\n(+%d more)" % (total - len(shown)) if total > len(shown) else ""
-                self.answer = "%d flag(s) raised %s:\n" % (total, period) + "\n".join(
-                    self._flag_line(f) for f in shown) + more
-            else:
-                self.answer = "Nothing has been flagged in that period."
-
-        elif 'why' in ql:
-            flag = Flag.browse()
-            if self.env.context.get('active_model') == 'vendorguard.fraud.flag':
-                flag = Flag.browse(self.env.context.get('active_id')).exists()
-            if not flag and vendor:
-                flag = vendor.fraud_flag_ids.filtered(lambda f: f.state in OPEN_STATES)[:1]
-            self.answer = flag.description if flag else self._snapshot()
-
-        elif vendor:
-            open_flags = vendor.fraud_flag_ids.filtered(lambda f: f.state in OPEN_STATES)
-            self.answer = (
-                "I don't have a canned answer for that, but here's what I know about %s: "
-                "trust score %d (%s), %d open flag(s)."
-            ) % (vendor.name, vendor.trust_score, vendor.trust_tier, len(open_flags))
-
-        else:
-            self.answer = self._snapshot()
-
+    def _reopen(self):
         return {
             'type': 'ir.actions.act_window',
             'res_model': 'vendorguard.ask.wizard',
@@ -134,3 +49,57 @@ class VendorguardAskWizard(models.TransientModel):
             'view_mode': 'form',
             'target': 'new',
         }
+
+    def action_ask(self):
+        self.ensure_one()
+        question = (self.question or '').strip()
+        if not question:
+            question = "Give me a one-sentence status summary of vendor fraud risk right now."
+
+        api_key = self.env['ir.config_parameter'].sudo().get_param(API_KEY_PARAM)
+        if not api_key:
+            self.answer = (
+                "No Anthropic API key configured. Open the VendorGuard app's Settings menu, "
+                "paste in a key from console.anthropic.com/settings/keys, then ask again."
+            )
+            return self._reopen()
+
+        system_prompt = (
+            "You are VendorGuard, a vendor fraud-detection assistant embedded in an Odoo "
+            "accounting module. Answer the user's question using ONLY the data below -- never "
+            "invent vendor names, numbers, or flags that aren't listed. If the data doesn't "
+            "answer the question, say so plainly. Be concise (2-4 sentences), and speak like "
+            "you're briefing a finance manager, not a generic chatbot.\n\nCurrent data:\n"
+        ) + self._build_context_snapshot()
+
+        try:
+            response = requests.post(
+                ANTHROPIC_API_URL,
+                headers={
+                    'x-api-key': api_key,
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                },
+                json={
+                    'model': ANTHROPIC_MODEL,
+                    'max_tokens': ANTHROPIC_MAX_TOKENS,
+                    'system': system_prompt,
+                    'messages': [{'role': 'user', 'content': question}],
+                },
+                timeout=ANTHROPIC_TIMEOUT,
+            )
+            response.raise_for_status()
+            data = response.json()
+            text = ''.join(
+                block.get('text', '') for block in data.get('content', [])
+                if block.get('type') == 'text'
+            ).strip()
+            self.answer = text or "Claude returned an empty response."
+        except requests.exceptions.RequestException as exc:
+            _logger.warning("VendorGuard: Claude API call failed: %s", exc)
+            self.answer = "Couldn't reach Claude (%s). Check your network connection and API key." % exc
+        except (KeyError, ValueError, TypeError) as exc:
+            _logger.warning("VendorGuard: unexpected Claude API response shape: %s", exc)
+            self.answer = "Claude returned an unexpected response that couldn't be parsed."
+
+        return self._reopen()

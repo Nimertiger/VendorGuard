@@ -1,0 +1,29 @@
+<odoo>
+    <record id="vendorguard_settings_view_form" model="ir.ui.view">
+        <field name="name">vendorguard.settings.view.form</field>
+        <field name="model">vendorguard.settings</field>
+        <field name="arch" type="xml">
+            <form>
+                <p>Paste an API key from
+                   <a href="https://console.anthropic.com/settings/keys" target="_blank">
+                       console.anthropic.com/settings/keys
+                   </a>
+                   so Ask VendorGuard can call Claude.</p>
+                <group>
+                    <field name="anthropic_api_key" password="True" placeholder="sk-ant-..."/>
+                </group>
+                <footer>
+                    <button name="action_save" type="object" string="Save" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="vendorguard_settings_action" model="ir.actions.act_window">
+        <field name="name">VendorGuard Settings</field>
+        <field name="res_model">vendorguard.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

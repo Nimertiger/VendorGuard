@@ -6,7 +6,8 @@ VendorGuard catches vendor bill and purchase order fraud before payment goes
 out, using nine independent detection signals spanning transaction rules, an
 identity check, a real cross-module procurement control, and two statistical
 tests — plus a live vendor trust score, a Finance Manager approval workflow,
-and a templated Q&A assistant with no external AI/network dependency.
+and an AI assistant ("Ask VendorGuard") powered by Claude, grounded in the
+system's live vendor and fraud-flag data.
 
 ## Detection signals
 
@@ -58,15 +59,23 @@ blocks, live, naming every signal that fired with the actual numbers. Open
 the flags, **Approve** as a Finance Manager, click **Confirm** again — it
 posts.
 
+## Setting up Ask VendorGuard (Claude)
+
+1. Get an API key at https://console.anthropic.com/settings/keys.
+2. In the VendorGuard app, open **Settings** (visible to Administration
+   users), paste the key in, and Save.
+3. Open **Ask VendorGuard** and type a question — it answers using the
+   current vendor trust scores and open flags as context.
+
 ## Running the tests
 
 ```
 odoo-bin -c odoo.conf -d <your-db> -u vendorguard --test-enable --test-tags /vendorguard --stop-after-init --addons-path=<odoo-addons>,<path-to-this-repo>
 ```
 
-46 `TransactionCase` tests cover all nine checks, the approval workflow and
-its security boundary, multi-company scoping, trust score computation, and
-the Q&A assistant — see `vendorguard/tests/`.
+`TransactionCase` tests cover all nine checks, the approval workflow and
+its security boundary, multi-company scoping, and trust score computation
+— see `vendorguard/tests/`.
 
 ## Architecture notes
 
@@ -82,9 +91,12 @@ the Q&A assistant — see `vendorguard/tests/`.
   to that group at the ACL layer too).
 - Fraud flags are company-scoped (`company_id` + an `ir.rule`), matching
   Odoo's standard multi-company model.
-- The Q&A assistant ("Ask VendorGuard") is templated pattern-matching over
-  real ORM queries — deliberately not an LLM call, so it has zero network
-  dependency and can't fail unpredictably during a live demo.
+- The Q&A assistant ("Ask VendorGuard") calls the Claude API directly
+  (`requests`, no SDK dependency), grounded with a compact snapshot of
+  every vendor's trust score and open flags so it answers from real data
+  instead of inventing numbers. Requires an Anthropic API key set under
+  Settings > General Settings > VendorGuard; this is a live network call,
+  so it depends on connectivity during a demo.
 
 ## Roadmap (out of scope for this build)
 

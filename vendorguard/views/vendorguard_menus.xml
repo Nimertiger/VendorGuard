@@ -20,4 +20,9 @@
     <menuitem id="vendorguard_menu_ask_wizard" name="Ask VendorGuard"
               parent="vendorguard_menu_root"
               action="vendorguard_ask_wizard_action" sequence="50"/>
+
+    <menuitem id="vendorguard_menu_settings" name="Settings"
+              parent="vendorguard_menu_root"
+              action="vendorguard_settings_action" sequence="60"
+              groups="base.group_system"/>
 </odoo>

@@ -23,10 +23,11 @@ check, a real cross-module procurement control, and two statistical tests:
 
 Every vendor gets a live, computed Trust Score and risk tier. Flags route
 through a Finance Manager approval workflow before a blocked bill or
-purchase order can be confirmed. A templated Q&A assistant ("Ask
-VendorGuard") answers questions about the vendors and flags currently in
-the system — no external AI call, so it never depends on a network
-connection during a live demo.
+purchase order can be confirmed. An AI assistant ("Ask VendorGuard"),
+powered by Claude, answers free-form questions about the vendors and
+flags currently in the system — grounded in the live data, not a
+canned script. Requires an Anthropic API key, set via the VendorGuard
+app's own Settings menu.
 """,
     'author': 'VendorGuard Team',
     'license': 'LGPL-3',
@@ -42,6 +43,7 @@ connection during a live demo.
         'views/purchase_order_views.xml',
         'views/vendorguard_demo_scenario_views.xml',
         'views/vendorguard_ask_wizard_views.xml',
+        'views/vendorguard_settings_views.xml',
         'views/vendorguard_menus.xml',
     ],
 }
