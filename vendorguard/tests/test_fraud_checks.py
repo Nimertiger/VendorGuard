@@ -31,6 +31,13 @@ class TestFraudChecks(TransactionCase):
         cls.regular_user = cls.env['res.users'].create({
             'name': 'VG Test Regular User', 'login': 'vg_test_regular_user',
         })
+        # a normal AP clerk: can create/post bills and confirm POs, but is NOT a Finance
+        # Manager -- this is the persona that exposed the create()/activity_schedule() bugs,
+        # since TransactionCase's default self.env runs as superuser and never hit them
+        cls.clerk_user = cls.env['res.users'].create({
+            'name': 'VG Test AP Clerk', 'login': 'vg_test_ap_clerk',
+            'group_ids': [(4, cls.account_invoice_group.id), (4, cls.purchase_user_group.id)],
+        })
 
     def _make_vendor(self, name, **vals):
         vals.setdefault('is_company', True)
@@ -418,3 +425,130 @@ class TestFraudChecks(TransactionCase):
         self._post_bill(vendor, 100.0, 'WORST-001')  # bank_swap -40, segregation -10, bank recency -20
         self.assertGreaterEqual(vendor.trust_score, 0)
         self.assertLessEqual(vendor.trust_score, 100)
+
+    def test_cron_recompute_expires_stale_bank_change_penalty(self):
+        # regression: trust_score's stored compute depends on bank_change_log_ids.change_date,
+        # which never itself changes -- so the -20 "recent bank change" penalty stayed applied
+        # forever past the recency window unless *something* wrote to the log or a flag.
+        # Backdating via raw SQL (not an ORM write) simulates real time passing with no such
+        # write, which is exactly the scenario the cron exists to fix.
+        vendor = self._make_vendor('VG Cron Recompute Vendor')
+        bank = self.env['res.partner.bank'].create(
+            {'partner_id': vendor.id, 'acc_number': 'AE070000000000401'})
+        bank.write({'acc_number': 'AE070000000000402'})
+        self.assertEqual(vendor.trust_score, 80, "fresh bank change costs -20")
+        log = self.env['vendorguard.bank.change.log'].sudo().search(
+            [('partner_id', '=', vendor.id)], limit=1)
+        from dateutil.relativedelta import relativedelta
+        old_date = fields.Datetime.now() - relativedelta(days=30)
+        self.env.cr.execute(
+            "UPDATE vendorguard_bank_change_log SET change_date = %s WHERE id = %s",
+            (old_date, log.id))
+        # No invalidate here: this is the point of the test. A stored computed field's
+        # cached/DB value has no reason to move just because a raw SQL write happened with
+        # no ORM-level trigger behind it -- exactly what "time passes, nothing recomputes"
+        # looks like in practice.
+        self.assertEqual(vendor.trust_score, 80, "stored field stays stale with no recompute trigger")
+        # the log's own change_date IS stale in cache at this point (last read before the
+        # backdate) -- invalidate just that so the cron's recompute sees the real DB value
+        log.invalidate_recordset(['change_date'])
+        self.env['res.partner']._cron_recompute_trust_scores()
+        self.assertEqual(vendor.trust_score, 100, "cron must expire the now-30-day-old penalty")
+
+    # --- regressions found by an independent judge-agent review pass ---
+
+    def test_non_manager_cannot_create_flag_with_non_default_state(self):
+        # a regular employee had no create()-time state check (only write() was guarded),
+        # so they could fabricate a flag that already reads 'Approved' in one create() call,
+        # bypassing the review workflow and polluting the audit trail
+        vendor = self._make_vendor('VG Fabricated Approval Vendor')
+        with self.assertRaises(AccessError):
+            self.env['vendorguard.fraud.flag'].with_user(self.regular_user).create({
+                'flag_type': 'ghost_vendor', 'severity': 'medium', 'state': 'approved',
+                'partner_id': vendor.id, 'resolvable': False, 'description': 'x',
+            })
+
+    def test_non_manager_can_create_flag_with_default_state(self):
+        vendor = self._make_vendor('VG Normal Creation Vendor')
+        flag = self.env['vendorguard.fraud.flag'].with_user(self.regular_user).create({
+            'flag_type': 'ghost_vendor', 'severity': 'medium', 'state': 'flagged',
+            'partner_id': vendor.id, 'resolvable': False, 'description': 'x',
+        })
+        self.assertEqual(flag.state, 'flagged')
+
+    def test_bank_swap_notification_does_not_crash_for_non_manager(self):
+        # _notify_finance_managers()'s activity_schedule() call wasn't sudo'd, so posting a
+        # bill that trips the (severity=critical) bank_swap detector as anyone other than a
+        # Finance Manager raised an AccessError instead of gracefully blocking the bill --
+        # exactly the path the demo's headline scenario exercises
+        vendor = self._make_vendor('VG Bank Swap Clerk Vendor')
+        bank = self.env['res.partner.bank'].create(
+            {'partner_id': vendor.id, 'acc_number': 'AE070000000000501'})
+        bank.write({'acc_number': 'AE070000000000502'})
+        move = self.env['account.move'].with_user(self.clerk_user).create({
+            'move_type': 'in_invoice', 'partner_id': vendor.id,
+            'invoice_date': fields.Date.today(), 'ref': 'BSC-001', 'journal_id': self.journal.id,
+            'invoice_line_ids': [(0, 0, {'name': 'BSC-001', 'quantity': 1, 'price_unit': 500.0})],
+        })
+        move.with_user(self.clerk_user).action_post()  # must not raise
+        self.assertEqual(move.state, 'draft')
+        flag = self.env['vendorguard.fraud.flag'].search([
+            ('move_id', '=', move.id), ('flag_type', '=', 'bank_swap')])
+        self.assertTrue(flag)
+        self.assertEqual(flag.severity, 'critical')
+
+    def test_demo_scenario_loads_successfully_for_non_manager_user(self):
+        # the loader's cleanup step did direct (non-sudo) unlink()s on models a regular
+        # employee has no delete rights on (fraud.flag, account.move, purchase.order, bank
+        # change log) -- any employee should be able to click "Load Demo Scenario", the
+        # single most-clicked button in the module
+        self.env['vendorguard.demo.scenario'].with_user(self.clerk_user).create({}) \
+            .action_load_demo_scenario()
+
+    def test_reject_allowed_on_nonresolvable_flag(self):
+        # Reject used to be blocked for non-resolvable (structural) flags exactly like
+        # Approve, leaving no UI-exposed way to dismiss a stale/false-positive structural
+        # flag -- Reject now means "reviewed, dismissed," distinct from Approve
+        vendor = self._make_vendor('VG Reject Nonresolvable Vendor')
+        po1 = self.env['purchase.order'].create({
+            'partner_id': vendor.id,
+            'order_line': [(0, 0, {
+                'product_id': self.product.id, 'name': 'batch 1', 'product_qty': 1, 'price_unit': 8000.0})],
+        })
+        po1.button_confirm()
+        po2 = self.env['purchase.order'].create({
+            'partner_id': vendor.id,
+            'order_line': [(0, 0, {
+                'product_id': self.product.id, 'name': 'batch 2', 'product_qty': 1, 'price_unit': 8000.0})],
+        })
+        po2.button_confirm()
+        flag = self.env['vendorguard.fraud.flag'].search([('purchase_order_id', '=', po2.id)])
+        self.assertFalse(flag.resolvable)
+        flag.with_user(self.manager_user).action_reject()  # must not raise
+        self.assertEqual(flag.state, 'rejected')
+
+    def test_structuring_flag_auto_clears_when_sibling_po_cancelled(self):
+        # once flagged, the structuring check never re-evaluated on retry -- even after the
+        # exact fix its own block message suggests ("adjust... the vendor's PO history"), the
+        # flag stayed 'flagged' forever and confirming the PO stayed blocked indefinitely
+        vendor = self._make_vendor('VG Structuring Fix Vendor')
+        po1 = self.env['purchase.order'].create({
+            'partner_id': vendor.id,
+            'order_line': [(0, 0, {
+                'product_id': self.product.id, 'name': 'batch 1', 'product_qty': 1, 'price_unit': 8000.0})],
+        })
+        po1.button_confirm()
+        po2 = self.env['purchase.order'].create({
+            'partner_id': vendor.id,
+            'order_line': [(0, 0, {
+                'product_id': self.product.id, 'name': 'batch 2', 'product_qty': 1, 'price_unit': 8000.0})],
+        })
+        po2.button_confirm()
+        self.assertEqual(po2.state, 'draft')
+        po1.button_cancel()
+        po2.button_confirm()
+        self.assertEqual(po2.state, 'purchase',
+                          "confirming again after fixing the underlying pattern must succeed")
+        flag = self.env['vendorguard.fraud.flag'].search([('purchase_order_id', '=', po2.id)])
+        self.assertEqual(flag.state, 'rejected',
+                          "the stale flag must be auto-cleared, not left blocking forever")

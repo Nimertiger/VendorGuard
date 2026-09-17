@@ -51,6 +51,15 @@ class ResPartner(models.Model):
             else:
                 partner.trust_tier = 'high_risk'
 
+    def _cron_recompute_trust_scores(self):
+        # trust_score is a stored compute keyed on bank_change_log_ids.change_date, which
+        # never itself changes — so a partner's -20 "recent bank change" penalty would
+        # otherwise stay applied forever past the recency window with nothing to trigger a
+        # recompute. Touch every partner with bank-change history once a day so the penalty
+        # actually expires on schedule.
+        partners = self.search([('bank_change_log_ids', '!=', False)])
+        partners._compute_trust_score()
+
     @api.model_create_multi
     def create(self, vals_list):
         partners = super().create(vals_list)
@@ -63,7 +72,7 @@ class ResPartner(models.Model):
         # impersonation, so comparing against unrelated customer names would just be noise
         vendors = self.env['res.partner'].search([('is_company', '=', True), ('supplier_rank', '>', 0)])
         for partner in self:
-            if not partner.is_company or not partner.name:
+            if not partner.is_company or not partner.name or not partner.supplier_rank:
                 continue
             for other in vendors - partner:
                 if not other.name:

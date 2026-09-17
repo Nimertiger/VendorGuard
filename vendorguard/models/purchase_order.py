@@ -41,11 +41,6 @@ class PurchaseOrder(models.Model):
     def _vendorguard_check_structuring(self):
         """Returns a human-readable block message if this PO should not confirm, else None."""
         self.ensure_one()
-        already_flagged = self.fraud_flag_ids.filtered(
-            lambda f: f.flag_type == 'structuring' and f.state in ('flagged', 'pending_review'))
-        if already_flagged:
-            # don't spam a fresh flag on every retry — the existing one already blocks this PO
-            return already_flagged[0].description
         ref_date = self.date_order or fields.Datetime.now()
         window_start = ref_date - relativedelta(days=STRUCTURING_WINDOW_DAYS)
         siblings = self.env['purchase.order'].search([
@@ -59,21 +54,35 @@ class PurchaseOrder(models.Model):
         amounts = siblings.mapped('amount_total') + [self.amount_total]
         total = sum(amounts)
         max_single = max(amounts)
-        if total > STRUCTURING_THRESHOLD and max_single <= STRUCTURING_THRESHOLD:
-            self.env['vendorguard.fraud.flag'].create({
-                'flag_type': 'structuring', 'severity': 'high', 'state': 'flagged',
-                'partner_id': self.partner_id.id, 'purchase_order_id': self.id,
-                'company_id': self.company_id.id,
-                'amount': total, 'resolvable': False,
-                'description': (
-                    "Vendor %s has %d purchase orders totalling %.2f within the last %d days, "
-                    "exceeding the %.2f threshold, while no single PO alone exceeded it."
-                ) % (self.partner_id.name, len(siblings) + 1, total, STRUCTURING_WINDOW_DAYS, STRUCTURING_THRESHOLD),
-            })
-            return (
-                "Confirming this PO would bring total purchases from %s to %.2f over %d days, "
-                "over the %.2f threshold, without any single PO crossing it. Blocked as a possible "
-                "structuring pattern — this is a structural issue with the purchase history, not "
-                "something to approve away; adjust the order or the vendor's PO history instead."
-            ) % (self.partner_id.name, total, STRUCTURING_WINDOW_DAYS, STRUCTURING_THRESHOLD)
-        return None
+        pattern_present = total > STRUCTURING_THRESHOLD and max_single <= STRUCTURING_THRESHOLD
+
+        already_flagged = self.fraud_flag_ids.filtered(
+            lambda f: f.flag_type == 'structuring' and f.state in ('flagged', 'pending_review'))
+        if not pattern_present:
+            if already_flagged:
+                # the underlying pattern no longer holds (e.g. a sibling PO was cancelled) —
+                # auto-clear the stale flag instead of leaving it blocking forever, since the
+                # only other way out was a Finance Manager finding and rejecting it manually
+                already_flagged.with_context(vendorguard_internal_state_change=True).write(
+                    {'state': 'rejected'})
+            return None
+        if already_flagged:
+            # don't spam a fresh flag on every retry — the existing one already blocks this PO
+            return already_flagged[0].description
+        self.env['vendorguard.fraud.flag'].create({
+            'flag_type': 'structuring', 'severity': 'high', 'state': 'flagged',
+            'partner_id': self.partner_id.id, 'purchase_order_id': self.id,
+            'company_id': self.company_id.id,
+            'amount': total, 'resolvable': False,
+            'description': (
+                "Vendor %s has %d purchase orders totalling %.2f within the last %d days, "
+                "exceeding the %.2f threshold, while no single PO alone exceeded it."
+            ) % (self.partner_id.name, len(siblings) + 1, total, STRUCTURING_WINDOW_DAYS, STRUCTURING_THRESHOLD),
+        })
+        return (
+            "Confirming this PO would bring total purchases from %s to %.2f over %d days, "
+            "over the %.2f threshold, without any single PO crossing it. Blocked as a possible "
+            "structuring pattern — this is a structural issue with the purchase history, not "
+            "something to approve away; adjust the order or the vendor's PO history instead, "
+            "or a Finance Manager can Reject the flag if it's a false positive."
+        ) % (self.partner_id.name, total, STRUCTURING_WINDOW_DAYS, STRUCTURING_THRESHOLD)

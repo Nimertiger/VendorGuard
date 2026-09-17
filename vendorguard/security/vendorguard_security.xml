@@ -4,6 +4,13 @@
         <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
     </record>
 
+    <!-- Without this, a fresh install has nobody in the Finance Manager group, so the
+         Approve/Reject buttons are invisible for literally everyone (including admin)
+         until someone manually assigns the group via Settings -> Users. -->
+    <record id="base.user_admin" model="res.users">
+        <field name="group_ids" eval="[(4, ref('vendorguard.group_finance_manager'))]"/>
+    </record>
+
     <record id="vendorguard_fraud_flag_company_rule" model="ir.rule">
         <field name="name">VendorGuard Fraud Flag: multi-company</field>
         <field name="model_id" ref="model_vendorguard_fraud_flag"/>

@@ -42,6 +42,12 @@ class VendorguardFraudFlag(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        if not self.env.user.has_group('vendorguard.group_finance_manager'):
+            for vals in vals_list:
+                if vals.get('state', 'flagged') != 'flagged':
+                    raise AccessError(_(
+                        "Only Finance Managers can create a fraud flag that isn't in the "
+                        "Flagged state."))
         flags = super().create(vals_list)
         flags.filtered(lambda f: f.severity == 'critical')._notify_finance_managers()
         return flags
@@ -53,7 +59,10 @@ class VendorguardFraudFlag(models.Model):
         for flag in self:
             recipients = managers or self.env.user
             for manager in recipients:
-                flag.activity_schedule(
+                # sudo: this fires from create(), which any employee can trigger by posting a
+                # bill — the notification itself is a system side-effect, not something that
+                # should require the acting user to already hold write access on the flag.
+                flag.sudo().activity_schedule(
                     'mail.mail_activity_data_todo',
                     user_id=manager.id,
                     summary="VendorGuard: critical %s flag on %s" % (
@@ -71,20 +80,23 @@ class VendorguardFraudFlag(models.Model):
         if len(self) == 1 and not self.resolvable:
             raise UserError(_(
                 "This flag is a structural data problem, not something to approve. "
-                "Fix or cancel the underlying document instead."))
+                "Fix or cancel the underlying document instead, or Reject it if it's a "
+                "false positive."))
         for flag in self.filtered('resolvable'):
             if flag.state not in ('flagged', 'pending_review'):
                 continue
             flag.with_context(vendorguard_internal_state_change=True).state = 'approved'
 
     def action_reject(self):
+        # Unlike approve, reject is allowed even on non-resolvable (structural) flags: it
+        # means "reviewed, dismissed as a false positive," not "this pattern is fine to
+        # repeat" — it's the only UI-exposed way to clear a structural flag that's stale or
+        # was raised in error, since those flags don't auto-clear on their own.
         if not self.env.user.has_group('vendorguard.group_finance_manager'):
             raise AccessError(_("Only Finance Managers can reject fraud flags."))
-        if len(self) == 1 and not self.resolvable:
-            raise UserError(_(
-                "This flag is a structural data problem, not something to reject. "
-                "Fix or cancel the underlying document instead."))
-        for flag in self.filtered('resolvable'):
+        for flag in self:
+            if flag.state not in ('flagged', 'pending_review'):
+                continue
             flag.with_context(vendorguard_internal_state_change=True).state = 'rejected'
 
     def write(self, vals):

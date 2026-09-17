@@ -10,6 +10,10 @@
                    two vendors seeded with synthetic bill history for the Benford's Law and
                    chi-square statistical audit. Safe to run repeatedly — it always resets to a
                    clean, demoable state.</p>
+                <p><strong>Structuring beat:</strong> the seeded purchase order alone stays under the
+                   threshold on purpose — it only blocks once you create and confirm a second PO for
+                   the same vendor live, so the block happens in front of the audience instead of
+                   already having happened before you start talking.</p>
                 <footer>
                     <button name="action_load_demo_scenario" type="object"
                             string="Load Demo Scenario" class="btn-primary"/>

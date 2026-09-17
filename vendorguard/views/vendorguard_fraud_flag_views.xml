@@ -29,7 +29,7 @@
                             invisible="not resolvable or state not in ('flagged','pending_review')"
                             groups="vendorguard.group_finance_manager"/>
                     <button name="action_reject" type="object" string="Reject"
-                            invisible="not resolvable or state not in ('flagged','pending_review')"
+                            invisible="state not in ('flagged','pending_review')"
                             groups="vendorguard.group_finance_manager"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="flagged,pending_review,approved,rejected"/>
