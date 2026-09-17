@@ -136,7 +136,9 @@ class AccountMove(models.Model):
         if new_flags:
             for vals in new_flags:
                 vals['company_id'] = self.company_id.id
-            created = self.env['vendorguard.fraud.flag'].create(new_flags)
+            # sudo: flags are system-raised, not user-authored -- base.group_user has no
+            # create access on this model so a regular poster can't forge one via the ORM
+            created = self.env['vendorguard.fraud.flag'].sudo().create(new_flags)
             return (
                 "VendorGuard blocked this bill from %s — %d new issue(s) found:\n%s\n\n"
                 "Ask a Finance Manager to review and approve before posting again."
@@ -176,7 +178,7 @@ class AccountMove(models.Model):
         ], limit=1)
         if existing:
             return
-        self.env['vendorguard.fraud.flag'].create({
+        self.env['vendorguard.fraud.flag'].sudo().create({
             'flag_type': 'ghost_vendor', 'severity': 'medium', 'state': 'flagged',
             'partner_id': partner.id, 'resolvable': False, 'company_id': self.company_id.id,
             'description': (

@@ -164,32 +164,33 @@ class VendorguardDemoScenario(models.Model):
         # --- Three-way match demo: PO for 20 units, only 12 recorded as received, ordered-policy
         # billing lets a bill go out for the full 20 anyway — the live "Post" click blocks on it. ---
         twm_product = self._find_or_create_twm_product()
-        twm_po = self.env['purchase.order'].search([
-            ('partner_id', '=', vendor.id),
-            ('order_line.name', '=', 'Steel Rebar Delivery — Site B'),
-        ], limit=1)
+        twm_marker = 'Steel Rebar Delivery — Site B'
+        # Once a bill posts, deleting it hits the same accounting sequence-chain integrity
+        # rule as the Benford seed bills (see _seed_benford_vendor) -- rather than fight it,
+        # reuse a PO for this beat only while it has no posted bill against it yet; once the
+        # presenter completes the live block -> approve -> post cycle on one, start a fresh
+        # PO next load instead of touching the now-historical posted bill.
+        twm_po = next((
+            po for po in self.env['purchase.order'].search([
+                ('partner_id', '=', vendor.id), ('order_line.name', '=', twm_marker),
+            ])
+            if not po.invoice_ids.filtered(lambda m: m.state == 'posted')
+        ), None)
         if not twm_po:
             twm_po = self.env['purchase.order'].create({
                 'partner_id': vendor.id,
                 'order_line': [(0, 0, {
                     'product_id': twm_product.id,
-                    'name': 'Steel Rebar Delivery — Site B',
+                    'name': twm_marker,
                     'product_qty': 20,
                     'price_unit': 100.0,
                 })],
             })
         if twm_po.state != 'purchase':
             twm_po.button_confirm()
-        # Reset any bill left over from a prior live run (posted or draft) so the "billed more
-        # than received" gap is always fresh and demoable, not consumed by a previous rehearsal.
-        old_twm_invoices = twm_po.invoice_ids
-        if old_twm_invoices:
-            try:
-                old_twm_invoices.filtered(lambda m: m.state == 'posted').with_context(
-                    vendorguard_seeding=True).button_draft()
-            except Exception:
-                pass  # locked period or similar — leave old data in place rather than crash
-            old_twm_invoices.unlink()
+        # Any leftover draft bill from an unfinished prior run is always safe to clear —
+        # drafts never consumed a sequence number, unlike the posted case handled above.
+        twm_po.invoice_ids.filtered(lambda m: m.state == 'draft').unlink()
         twm_po.order_line.qty_received_manual = 12.0
         twm_po.action_create_invoice()
         twm_po.invoice_ids.filtered(lambda m: m.state == 'draft').write({'invoice_date': fields.Date.today()})

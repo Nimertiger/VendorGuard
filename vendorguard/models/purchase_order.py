@@ -62,14 +62,16 @@ class PurchaseOrder(models.Model):
             if already_flagged:
                 # the underlying pattern no longer holds (e.g. a sibling PO was cancelled) —
                 # auto-clear the stale flag instead of leaving it blocking forever, since the
-                # only other way out was a Finance Manager finding and rejecting it manually
-                already_flagged.with_context(vendorguard_internal_state_change=True).write(
+                # only other way out was a Finance Manager finding and rejecting it manually.
+                # sudo: this is a system-triggered state change, not a user editing the flag
+                # directly, and a non-manager confirming a PO has no write access on flags.
+                already_flagged.sudo().with_context(vendorguard_internal_state_change=True).write(
                     {'state': 'rejected'})
             return None
         if already_flagged:
             # don't spam a fresh flag on every retry — the existing one already blocks this PO
             return already_flagged[0].description
-        self.env['vendorguard.fraud.flag'].create({
+        self.env['vendorguard.fraud.flag'].sudo().create({
             'flag_type': 'structuring', 'severity': 'high', 'state': 'flagged',
             'partner_id': self.partner_id.id, 'purchase_order_id': self.id,
             'company_id': self.company_id.id,

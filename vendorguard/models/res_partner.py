@@ -79,7 +79,7 @@ class ResPartner(models.Model):
                     continue
                 ratio = difflib.SequenceMatcher(None, partner.name.lower(), other.name.lower()).ratio()
                 if LOOKALIKE_SIMILARITY_THRESHOLD <= ratio < 1.0:
-                    self.env['vendorguard.fraud.flag'].create({
+                    self.env['vendorguard.fraud.flag'].sudo().create({
                         'flag_type': 'lookalike_vendor', 'severity': 'medium', 'state': 'flagged',
                         'partner_id': partner.id, 'resolvable': False,
                         'description': (
@@ -133,7 +133,7 @@ class ResPartner(models.Model):
                     if chi_square_fails else
                     " Chi-square test does not independently confirm this at the 0.05 level."
                 )
-                self.env['vendorguard.fraud.flag'].create({
+                self.env['vendorguard.fraud.flag'].sudo().create({
                     'flag_type': 'benford_anomaly', 'severity': 'high', 'state': 'flagged',
                     'partner_id': self.id, 'resolvable': True,
                     'description': (

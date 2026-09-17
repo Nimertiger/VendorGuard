@@ -460,7 +460,9 @@ class TestFraudChecks(TransactionCase):
     def test_non_manager_cannot_create_flag_with_non_default_state(self):
         # a regular employee had no create()-time state check (only write() was guarded),
         # so they could fabricate a flag that already reads 'Approved' in one create() call,
-        # bypassing the review workflow and polluting the audit trail
+        # bypassing the review workflow and polluting the audit trail. Now backstopped at two
+        # layers: perm_create=0 for base.group_user at the ACL, and this Python guard for
+        # any sudo'd caller that forgets to pass state='flagged'.
         vendor = self._make_vendor('VG Fabricated Approval Vendor')
         with self.assertRaises(AccessError):
             self.env['vendorguard.fraud.flag'].with_user(self.regular_user).create({
@@ -468,9 +470,22 @@ class TestFraudChecks(TransactionCase):
                 'partner_id': vendor.id, 'resolvable': False, 'description': 'x',
             })
 
-    def test_non_manager_can_create_flag_with_default_state(self):
+    def test_non_manager_cannot_create_flag_at_all(self):
+        # base.group_user has perm_create=0 on this model entirely now -- a regular employee
+        # can no longer create a flag directly (with any state), only the detector code can,
+        # and only via sudo(). A forged flag on a colleague's bill used to be one create()
+        # call away for any employee; see test_flag_forgery_blocked_for_non_manager for the
+        # full attack shape this closes.
         vendor = self._make_vendor('VG Normal Creation Vendor')
-        flag = self.env['vendorguard.fraud.flag'].with_user(self.regular_user).create({
+        with self.assertRaises(AccessError):
+            self.env['vendorguard.fraud.flag'].with_user(self.regular_user).create({
+                'flag_type': 'ghost_vendor', 'severity': 'medium', 'state': 'flagged',
+                'partner_id': vendor.id, 'resolvable': False, 'description': 'x',
+            })
+
+    def test_manager_can_still_create_flag_directly(self):
+        vendor = self._make_vendor('VG Manager Creation Vendor')
+        flag = self.env['vendorguard.fraud.flag'].with_user(self.manager_user).create({
             'flag_type': 'ghost_vendor', 'severity': 'medium', 'state': 'flagged',
             'partner_id': vendor.id, 'resolvable': False, 'description': 'x',
         })
@@ -530,25 +545,67 @@ class TestFraudChecks(TransactionCase):
     def test_structuring_flag_auto_clears_when_sibling_po_cancelled(self):
         # once flagged, the structuring check never re-evaluated on retry -- even after the
         # exact fix its own block message suggests ("adjust... the vendor's PO history"), the
-        # flag stayed 'flagged' forever and confirming the PO stayed blocked indefinitely
+        # flag stayed 'flagged' forever and confirming the PO stayed blocked indefinitely.
+        # Run as clerk_user, not the default superuser env: the auto-clear write() needs its
+        # own sudo() (a non-manager has no write access on fraud.flag), and a first attempt
+        # at this fix shipped without it -- this exact test, run as superuser, didn't catch it.
         vendor = self._make_vendor('VG Structuring Fix Vendor')
-        po1 = self.env['purchase.order'].create({
+        po1 = self.env['purchase.order'].with_user(self.clerk_user).create({
             'partner_id': vendor.id,
             'order_line': [(0, 0, {
                 'product_id': self.product.id, 'name': 'batch 1', 'product_qty': 1, 'price_unit': 8000.0})],
         })
         po1.button_confirm()
-        po2 = self.env['purchase.order'].create({
+        po2 = self.env['purchase.order'].with_user(self.clerk_user).create({
             'partner_id': vendor.id,
             'order_line': [(0, 0, {
                 'product_id': self.product.id, 'name': 'batch 2', 'product_qty': 1, 'price_unit': 8000.0})],
         })
         po2.button_confirm()
         self.assertEqual(po2.state, 'draft')
-        po1.button_cancel()
-        po2.button_confirm()
+        po1.with_user(self.clerk_user).button_cancel()
+        po2.with_user(self.clerk_user).button_confirm()  # must not raise AccessError
         self.assertEqual(po2.state, 'purchase',
                           "confirming again after fixing the underlying pattern must succeed")
         flag = self.env['vendorguard.fraud.flag'].search([('purchase_order_id', '=', po2.id)])
         self.assertEqual(flag.state, 'rejected',
                           "the stale flag must be auto-cleared, not left blocking forever")
+
+    def test_flag_forgery_blocked_for_non_manager(self):
+        # create() only ever validated the 'state' field -- a regular employee could still
+        # forge a fully-formed critical flag (any flag_type/severity/partner_id/move_id) via
+        # a single create() call, since base.group_user had perm_create=1 on this model.
+        # Detector code now creates flags via sudo() and perm_create is revoked for
+        # base.group_user entirely, so any direct create() by a non-manager must be refused
+        # regardless of which fields it sets.
+        vendor = self._make_vendor('VG Forgery Target Vendor')
+        with self.assertRaises(AccessError):
+            self.env['vendorguard.fraud.flag'].with_user(self.regular_user).create({
+                'flag_type': 'bank_swap', 'severity': 'critical', 'state': 'flagged',
+                'partner_id': vendor.id, 'resolvable': True, 'description': 'forged',
+            })
+
+    def test_demo_scenario_reruns_cleanly_after_twm_bill_posted(self):
+        # the three-way-match demo bill's own reset step deleted a *posted* invoice, which
+        # hits the same accounting sequence-chain integrity rule as the (already-fixed)
+        # Benford seed bills once anything else posts to the same journal afterward --
+        # reproduce the exact rehearsal sequence: load, complete the TWM beat live
+        # (approve the flags, post), then reload again
+        scenario = self.env['vendorguard.demo.scenario'].with_user(self.clerk_user).create({})
+        scenario.action_load_demo_scenario()
+        vendor = self.env['res.partner'].search([('name', '=', 'Al Fahim Trading LLC')], limit=1)
+        twm_po = self.env['purchase.order'].search([
+            ('partner_id', '=', vendor.id), ('order_line.name', '=', 'Steel Rebar Delivery — Site B'),
+        ], limit=1)
+        twm_bill = twm_po.invoice_ids.filtered(lambda m: m.state == 'draft')
+        self.assertTrue(twm_bill)
+        twm_bill.action_post()
+        self.assertEqual(twm_bill.state, 'draft', "still blocked on the three-way-match flag")
+        flags = self.env['vendorguard.fraud.flag'].search([('move_id', '=', twm_bill.id)])
+        flags.with_user(self.manager_user).action_approve()
+        twm_bill.action_post()
+        self.assertEqual(twm_bill.state, 'posted')
+        # post one more bill to the same journal so the TWM bill is no longer last in its
+        # sequence chain -- this is what made the old unlink() attempt fail
+        self._post_bill(vendor, 50.0, 'CHAIN-FILLER-001', seeding=True)
+        scenario.action_load_demo_scenario()  # must not raise

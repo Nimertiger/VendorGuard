@@ -57,10 +57,25 @@
         </field>
     </record>
 
+    <record id="vendorguard_vendors_at_risk_view_list" model="ir.ui.view">
+        <field name="name">vendorguard.vendors.at.risk.view.list</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_tree"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <!-- riskiest first — this is what "Vendors at Risk" implies, and a standalone
+                     primary view keeps the sort scoped to this action, not every partner list -->
+                <attribute name="default_order">trust_score asc</attribute>
+            </xpath>
+        </field>
+    </record>
+
     <record id="vendorguard_vendors_at_risk_action" model="ir.actions.act_window">
         <field name="name">Vendors at Risk</field>
         <field name="res_model">res.partner</field>
         <field name="view_mode">list,kanban,form</field>
+        <field name="view_id" ref="vendorguard_vendors_at_risk_view_list"/>
         <field name="domain">[('is_company','=',True),('supplier_rank','&gt;',0)]</field>
     </record>
 </odoo>
