@@ -94,9 +94,19 @@ class AccountMove(models.Model):
 
         recent_change = self.env['vendorguard.bank.change.log'].search([
             ('partner_id', '=', self.partner_id.id),
+            ('company_id', '=', self.company_id.id),
             ('change_date', '>=', fields.Datetime.now() - relativedelta(days=BANK_CHANGE_RECENT_DAYS)),
         ], limit=1, order='change_date desc')
-        if recent_change and 'bank_swap' not in already_flagged_types:
+        # "already flagged" here means "a flag already covers *this* swap event," not just
+        # "a bank_swap flag exists at all" -- keying on flag_type alone let a bank swap that
+        # happened AFTER an earlier one was reviewed post through with no new flag, since a
+        # resolved flag from the first swap already satisfied the type-only check. Compare
+        # against when the event happened vs. when the most recent bank_swap flag was raised.
+        existing_bank_swap_flags = self.fraud_flag_ids.filtered(lambda f: f.flag_type == 'bank_swap')
+        already_covers_this_swap = recent_change and any(
+            f.create_date and f.create_date >= recent_change.change_date
+            for f in existing_bank_swap_flags)
+        if recent_change and not already_covers_this_swap:
             new_flags.append({
                 'flag_type': 'bank_swap', 'severity': 'critical', 'state': 'flagged',
                 'partner_id': self.partner_id.id, 'move_id': self.id,

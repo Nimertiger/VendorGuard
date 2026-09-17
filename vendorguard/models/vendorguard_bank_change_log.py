@@ -10,3 +10,4 @@ class VendorguardBankChangeLog(models.Model):
     old_acc_number = fields.Char()
     new_acc_number = fields.Char()
     change_date = fields.Datetime(default=fields.Datetime.now)
+    company_id = fields.Many2one('res.company', required=True, default=lambda self: self.env.company)

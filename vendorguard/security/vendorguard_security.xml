@@ -11,6 +11,12 @@
         <field name="group_ids" eval="[(4, ref('vendorguard.group_finance_manager'))]"/>
     </record>
 
+    <record id="vendorguard_bank_change_log_company_rule" model="ir.rule">
+        <field name="name">VendorGuard Bank Change Log: multi-company</field>
+        <field name="model_id" ref="model_vendorguard_bank_change_log"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
     <record id="vendorguard_fraud_flag_company_rule" model="ir.rule">
         <field name="name">VendorGuard Fraud Flag: multi-company</field>
         <field name="model_id" ref="model_vendorguard_fraud_flag"/>

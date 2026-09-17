@@ -100,6 +100,38 @@ class TestFraudChecks(TransactionCase):
             ('move_id', '=', move.id), ('flag_type', '=', 'bank_swap')])
         self.assertFalse(flag, "a bank change 30 days ago is outside the recency window")
 
+    def test_bank_swap_refires_on_a_second_swap_after_the_first_is_approved(self):
+        # already_flagged_types used to key purely on flag_type ("does a bank_swap flag
+        # exist at all for this bill"), not on whether it covered *this* swap event -- so
+        # approving one bank-swap flag silently disabled all future bank-swap detection on
+        # that bill, even for a genuinely new, later swap. A second real swap must still
+        # produce a second flag and re-block the bill.
+        vendor = self._make_vendor('VG Second Bank Swap Vendor', vat='AE100000000000009')
+        bank = self.env['res.partner.bank'].create(
+            {'partner_id': vendor.id, 'acc_number': 'AE070000000000601'})
+        bank.write({'acc_number': 'AE070000000000602'})
+        move = self._post_bill(vendor, 500.0, 'BS-REFIRE-001')
+        self.assertEqual(move.state, 'draft')
+        first_flag = self.env['vendorguard.fraud.flag'].search([
+            ('move_id', '=', move.id), ('flag_type', '=', 'bank_swap')])
+        self.assertEqual(len(first_flag), 1)
+        # approve everything blocking the move (posting as self.env's default user here also
+        # trips segregation_of_duties, same as the bank_swap flag it's not the point of this
+        # test) so the second post attempt actually reaches the bank_swap re-check instead of
+        # short-circuiting on an unrelated still-unresolved flag
+        all_first_round_flags = self.env['vendorguard.fraud.flag'].search([('move_id', '=', move.id)])
+        all_first_round_flags.with_user(self.manager_user).action_approve()
+
+        # a second, later swap on the same vendor before the bill finally posts
+        bank.write({'acc_number': 'AE070000000000603'})
+        move.with_user(self.manager_user).action_post()
+        self.assertEqual(move.state, 'draft', "a genuinely new swap must re-block posting")
+        all_bank_swap_flags = self.env['vendorguard.fraud.flag'].search([
+            ('move_id', '=', move.id), ('flag_type', '=', 'bank_swap')])
+        self.assertEqual(len(all_bank_swap_flags), 2,
+                          "the second swap must produce its own flag, not be silently covered "
+                          "by the first (already-approved) one")
+
     # --- segregation_of_duties ---
 
     def test_segregation_of_duties_flag(self):
@@ -393,6 +425,36 @@ class TestFraudChecks(TransactionCase):
         visible = self.env['vendorguard.fraud.flag'].with_user(cross_company_user).search(
             [('id', '=', flag.id)])
         self.assertFalse(visible, "a flag in another company must not be visible")
+
+    def test_bank_change_log_invisible_across_companies(self):
+        # bank.change.log held the same cross-company data-leak shape fraud.flag was fixed
+        # for, on a sibling model nobody had scoped: no company_id, no ir.rule
+        other_company = self.env['res.company'].create({'name': 'VG Other Bank Log Company'})
+        vendor = self._make_vendor('VG Cross Company Bank Vendor')
+        log = self.env['vendorguard.bank.change.log'].sudo().create({
+            'partner_id': vendor.id, 'old_acc_number': 'AE070000000000701',
+            'new_acc_number': 'AE070000000000702', 'company_id': other_company.id,
+        })
+        cross_company_user = self.env['res.users'].create({
+            'name': 'VG Cross Company Bank User', 'login': 'vg_cross_company_bank_user',
+            'company_ids': [(6, 0, self.env.company.ids)],
+            'company_id': self.env.company.id,
+        })
+        visible = self.env['vendorguard.bank.change.log'].with_user(cross_company_user).search(
+            [('id', '=', log.id)])
+        self.assertFalse(visible, "a bank-change log entry in another company must not be visible")
+
+    def test_bank_swap_refires_ignores_other_companies_recent_change(self):
+        other_company = self.env['res.company'].create({'name': 'VG Bank Swap Other Company'})
+        vendor = self._make_vendor('VG Bank Swap Cross Company Vendor')
+        self.env['vendorguard.bank.change.log'].sudo().create({
+            'partner_id': vendor.id, 'old_acc_number': 'AE070000000000801',
+            'new_acc_number': 'AE070000000000802', 'company_id': other_company.id,
+        })
+        move = self._post_bill(vendor, 500.0, 'BS-CROSS-001')
+        flag = self.env['vendorguard.fraud.flag'].search([
+            ('move_id', '=', move.id), ('flag_type', '=', 'bank_swap')])
+        self.assertFalse(flag, "a bank change logged against another company must not trigger this")
 
     def test_trust_score_starts_at_100_with_no_flags(self):
         vendor = self._make_vendor('VG Clean Vendor')

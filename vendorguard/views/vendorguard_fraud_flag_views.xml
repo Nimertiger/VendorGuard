@@ -40,7 +40,12 @@
                             <field name="flag_type"/>
                             <field name="severity"/>
                             <field name="partner_id"/>
-                            <field name="resolvable"/>
+                            <!-- system-determined by the detector that raised the flag, not a
+                                 manual toggle: editable here would let a manager flip a
+                                 structural flag to resolvable and Approve it away, defeating
+                                 the "structural issue, not something to approve" invariant
+                                 that action_approve() enforces -->
+                            <field name="resolvable" readonly="1"/>
                         </group>
                         <group>
                             <field name="move_id"/>
