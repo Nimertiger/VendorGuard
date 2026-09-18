@@ -11,6 +11,7 @@
                    so Ask VendorGuard can call Claude.</p>
                 <group>
                     <field name="anthropic_api_key" password="True" placeholder="sk-ant-..."/>
+                    <field name="anthropic_workspace_id" placeholder="wrkspc_... (only if your key needs it)"/>
                 </group>
                 <footer>
                     <button name="action_save" type="object" string="Save" class="btn-primary"/>

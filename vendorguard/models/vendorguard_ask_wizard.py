@@ -4,7 +4,7 @@ import requests
 
 from odoo import fields, models
 
-from .vendorguard_settings import API_KEY_PARAM
+from .vendorguard_settings import API_KEY_PARAM, WORKSPACE_ID_PARAM
 
 _logger = logging.getLogger(__name__)
 
@@ -56,13 +56,23 @@ class VendorguardAskWizard(models.TransientModel):
         if not question:
             question = "Give me a one-sentence status summary of vendor fraud risk right now."
 
-        api_key = self.env['ir.config_parameter'].sudo().get_param(API_KEY_PARAM)
+        params = self.env['ir.config_parameter'].sudo()
+        api_key = params.get_param(API_KEY_PARAM)
         if not api_key:
             self.answer = (
                 "No Anthropic API key configured. Open the VendorGuard app's Settings menu, "
                 "paste in a key from console.anthropic.com/settings/keys, then ask again."
             )
             return self._reopen()
+        workspace_id = params.get_param(WORKSPACE_ID_PARAM)
+
+        headers = {
+            'x-api-key': api_key,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+        }
+        if workspace_id:
+            headers['anthropic-workspace-id'] = workspace_id
 
         system_prompt = (
             "You are VendorGuard, a vendor fraud-detection assistant embedded in an Odoo "
@@ -75,11 +85,7 @@ class VendorguardAskWizard(models.TransientModel):
         try:
             response = requests.post(
                 ANTHROPIC_API_URL,
-                headers={
-                    'x-api-key': api_key,
-                    'anthropic-version': '2023-06-01',
-                    'content-type': 'application/json',
-                },
+                headers=headers,
                 json={
                     'model': ANTHROPIC_MODEL,
                     'max_tokens': ANTHROPIC_MAX_TOKENS,
@@ -95,6 +101,14 @@ class VendorguardAskWizard(models.TransientModel):
                 if block.get('type') == 'text'
             ).strip()
             self.answer = text or "Claude returned an empty response."
+        except requests.exceptions.HTTPError as exc:
+            detail = exc.response.text
+            try:
+                detail = exc.response.json().get('error', {}).get('message', detail)
+            except ValueError:
+                pass
+            _logger.warning("VendorGuard: Claude API call failed: %s", detail)
+            self.answer = "Claude rejected the request: %s" % detail
         except requests.exceptions.RequestException as exc:
             _logger.warning("VendorGuard: Claude API call failed: %s", exc)
             self.answer = "Couldn't reach Claude (%s). Check your network connection and API key." % exc

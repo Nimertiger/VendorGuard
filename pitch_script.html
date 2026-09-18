@@ -1,0 +1,441 @@
+<title>VendorGuard Run of Show</title>
+<style>
+  :root {
+    --paper: #eeece2;
+    --paper-raised: #f6f4ea;
+    --ink: #1f2421;
+    --ink-soft: #4b524c;
+    --line: #d6d2c2;
+    --brand: #1b4b43;
+    --brand-soft: #e2e9e2;
+    --alert: #8c2f2f;
+    --alert-soft: #f1dfd9;
+    --gold: #8a6a1f;
+    --gold-soft: #f0e6cb;
+    --mono-chip: #e4e1d3;
+    --shadow: 0 1px 2px rgba(31,36,33,.06), 0 6px 16px rgba(31,36,33,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #14171a;
+      --paper-raised: #1b1f22;
+      --ink: #ece8dd;
+      --ink-soft: #a7ada2;
+      --line: #33382f;
+      --brand: #4fa98c;
+      --brand-soft: #1e2c26;
+      --alert: #d9695f;
+      --alert-soft: #33201d;
+      --gold: #c9a44e;
+      --gold-soft: #2e2716;
+      --mono-chip: #23272a;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 20px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14171a;
+    --paper-raised: #1b1f22;
+    --ink: #ece8dd;
+    --ink-soft: #a7ada2;
+    --line: #33382f;
+    --brand: #4fa98c;
+    --brand-soft: #1e2c26;
+    --alert: #d9695f;
+    --alert-soft: #33201d;
+    --gold: #c9a44e;
+    --gold-soft: #2e2716;
+    --mono-chip: #23272a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 20px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 0 20px;
+    padding-block: 40px 80px;
+    line-height: 1.55;
+  }
+  .doc { max-width: 760px; margin: 0 auto; }
+
+  h1, h2, h3 { font-family: 'Source Serif 4', Georgia, serif; text-wrap: balance; margin: 0; }
+  h1 { font-size: 2.1rem; font-weight: 600; letter-spacing: -0.01em; }
+  .kicker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-soft); margin-bottom: 10px;
+  }
+  .subhead { color: var(--ink-soft); font-size: 1rem; max-width: 58ch; margin-top: 10px; }
+
+  header.top { margin-bottom: 34px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
+
+  .meta-row {
+    display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px;
+    font-family: 'IBM Plex Mono', monospace; font-size: .8rem; color: var(--ink-soft);
+  }
+  .meta-row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  section.block { margin-top: 40px; }
+  section.block > h2 {
+    font-size: 1.25rem; font-weight: 600; margin-bottom: 14px;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  section.block > h2 .num {
+    font-family: 'IBM Plex Mono', monospace; font-size: .78rem; color: var(--ink-soft);
+    font-weight: 500;
+  }
+
+  /* Checklist */
+  .checklist {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; box-shadow: var(--shadow);
+  }
+  .checklist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .checklist li { display: flex; gap: 10px; align-items: flex-start; font-size: .95rem; }
+  .checklist li::before {
+    content: ""; flex: none; width: 16px; height: 16px; margin-top: 3px;
+    border: 1.5px solid var(--ink-soft); border-radius: 4px;
+  }
+
+  /* cut list */
+  .cutlist {
+    margin-top: 14px; font-size: .88rem; color: var(--ink-soft);
+    border-left: 3px solid var(--gold); padding: 4px 0 4px 14px;
+  }
+  .cutlist b { color: var(--ink); }
+
+  /* Beat cards */
+  .beat {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow); overflow: hidden; margin-top: 22px;
+    border-left: 5px solid var(--stripe, var(--brand));
+  }
+  .beat.crit { --stripe: var(--alert); }
+  .beat.stat { --stripe: var(--gold); }
+  .beat.info { --stripe: var(--brand); }
+
+  .beat-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .beat-title { font-family: 'Source Serif 4', Georgia, serif; font-size: 1.15rem; font-weight: 600; }
+  .beat-time {
+    font-family: 'IBM Plex Mono', monospace; font-size: .78rem; color: var(--ink-soft);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .roles { display: flex; gap: 8px; padding: 0 20px; margin-top: 14px; flex-wrap: wrap; }
+  .pill {
+    font-family: 'IBM Plex Mono', monospace; font-size: .72rem; letter-spacing: .04em;
+    padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+  }
+  .pill.drive { background: var(--brand-soft); color: var(--brand); }
+  .pill.narrate { background: var(--mono-chip); color: var(--ink-soft); }
+
+  .beat-body { padding: 16px 20px 20px; display: grid; gap: 16px; }
+  @media (min-width: 620px) {
+    .beat-body { grid-template-columns: 1fr 1fr; align-items: start; }
+  }
+
+  .steps h4, .say h4 {
+    font-family: 'IBM Plex Mono', monospace; font-size: .7rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-soft); margin: 0 0 8px;
+  }
+  .steps ol { margin: 0; padding-left: 1.15em; display: grid; gap: 6px; font-size: .89rem; }
+  .steps li::marker { font-family: 'IBM Plex Mono', monospace; color: var(--ink-soft); }
+  .steps code {
+    font-family: 'IBM Plex Mono', monospace; font-size: .84em;
+    background: var(--mono-chip); padding: 1px 5px; border-radius: 4px;
+  }
+
+  .say blockquote {
+    margin: 0; padding: 10px 14px; border-left: 3px solid var(--line);
+    font-size: .93rem; display: grid; gap: 6px;
+  }
+  .say blockquote + blockquote { margin-top: 10px; }
+  .speaker {
+    font-family: 'IBM Plex Mono', monospace; font-size: .68rem; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-soft);
+  }
+  .cue { font-style: italic; color: var(--ink-soft); font-size: .85rem; }
+
+  .close-block { display: grid; gap: 12px; }
+  .close-line { display: flex; gap: 12px; align-items: baseline; }
+  .close-line .speaker { flex: none; width: 78px; }
+  .close-line p { margin: 0; font-size: .97rem; }
+
+  footer.tail {
+    margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: .82rem; color: var(--ink-soft);
+  }
+
+  @media (max-width: 420px) {
+    h1 { font-size: 1.7rem; }
+    .close-line { flex-direction: column; gap: 2px; }
+    .close-line .speaker { width: auto; }
+  }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<div class="doc">
+
+  <header class="top">
+    <div class="kicker">Run of Show — Odoo × AUS IEEE Hackathon</div>
+    <h1>VendorGuard</h1>
+    <p class="subhead">Two-presenter script. One drives the laptop, one talks to the judges — swapped each beat so you both get stage time. Total run time ≈ 6:15, built to trim.</p>
+    <div class="meta-row">
+      <span>Target: <b>6–7 min</b></span>
+      <span>Speakers: <b>YOU</b> / <b>PARTNER</b></span>
+      <span>Beats: <b>5</b></span>
+    </div>
+  </header>
+
+  <section class="block">
+    <h2>Before you're called up</h2>
+    <div class="checklist">
+      <ul>
+        <li>Click <b>Load Demo Scenario</b> once, fresh — if anyone clicked Confirm on the demo bill while testing, this resets it</li>
+        <li>Confirm you're logged in as <b>admin</b> (Finance Manager group — Approve/Reject buttons need it)</li>
+        <li>Test <b>Ask VendorGuard</b> once on the venue wifi — if Claude is slow or the network is bad, you'll know to skip Beat 5's AI line</li>
+        <li>Full-screen the browser, close unrelated tabs, zoom to a size the back row can read</li>
+        <li>Agree who's <b>driving</b> (clicks) vs <b>narrating</b> (faces the judges) for each beat below</li>
+      </ul>
+    </div>
+    <div class="cutlist">Running long? Cut <b>Beat 3 (Three-Way Match)</b> first — everything else stands alone without it.</div>
+  </section>
+
+  <section class="block">
+    <h2>Open <span class="num">0:00 – 0:30 · no laptop yet</span></h2>
+    <div class="beat info">
+      <div class="beat-head">
+        <div class="beat-title">The hook</div>
+        <div class="beat-time">30 sec</div>
+      </div>
+      <div class="roles">
+        <span class="pill narrate">You: narrate</span>
+        <span class="pill drive">Partner: open the app, stand by</span>
+      </div>
+      <div class="beat-body" style="grid-template-columns: 1fr;">
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote>
+            <span class="speaker">You</span>
+            <p>Vendor fraud costs companies an estimated 5% of revenue a year, per the ACFE. Most of it isn't sophisticated — a changed bank account, a split purchase order, an invoice for goods that never arrived. VendorGuard catches all three automatically, inside Odoo, at the exact moment someone tries to pay it. Nine signals, real fraud-examiner and forensic-accounting techniques — not a black box. Let's show you.</p>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Beat 1 — Bank Swap + Segregation of Duties <span class="num">0:30 – 2:00</span></h2>
+    <div class="beat crit">
+      <div class="beat-head">
+        <div class="beat-title">The headline block</div>
+        <div class="beat-time">≈90 sec</div>
+      </div>
+      <div class="roles">
+        <span class="pill drive">Partner: drives</span>
+        <span class="pill narrate">You: narrates</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Grid icon → <code>Invoicing</code> → <code>Vendors</code> → <code>Bills</code></li>
+            <li>Search <code>Al Fahim</code> → open the draft bill (ref <code>AFT-PENDING…</code>, AED 340,000)</li>
+            <li>Click <code>Confirm</code> — it blocks live</li>
+            <li>Open the <code>Fraud Flags</code> tab → click the <b>Bank Account Swap</b> row → <code>Approve</code> → <code>Close</code></li>
+            <li>Click the <b>Segregation of Duties</b> row → <code>Approve</code> → <code>Close</code></li>
+            <li>Click <code>Confirm</code> again — it posts</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote>
+            <span class="speaker">You — before clicking Confirm</span>
+            <p>Watch — I'm confirming a $340,000 payment to one of our vendors.</p>
+          </blockquote>
+          <blockquote>
+            <span class="cue">(it blocks)</span>
+            <span class="speaker">You</span>
+            <p>It stopped, live. Two issues at once: this vendor's bank account changed two days ago, and separately — whoever created this bill is also the one posting it. No second set of eyes.</p>
+          </blockquote>
+          <blockquote>
+            <span class="cue">(after approving + reposting)</span>
+            <span class="speaker">You</span>
+            <p>Once a Finance Manager reviews and approves, it posts. Nothing gets silently paid.</p>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Beat 2 — Structuring <span class="num">2:00 – 3:00</span></h2>
+    <div class="beat crit">
+      <div class="beat-head">
+        <div class="beat-title">Splitting a payment to dodge review</div>
+        <div class="beat-time">≈60 sec</div>
+      </div>
+      <div class="roles">
+        <span class="pill drive">You: drives</span>
+        <span class="pill narrate">Partner: narrates</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Grid icon → <code>Purchase</code> → <code>New</code></li>
+            <li>Vendor: <code>Al Fahim Trading LLC</code></li>
+            <li>Add a product line (any) → qty <code>1</code> → price <code>5000</code></li>
+            <li>Click <code>Confirm Order</code> — it blocks live</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote>
+            <span class="speaker">Partner</span>
+            <p>This vendor already has a $6,000 order on the books this month — under our $10,000 review threshold. I'm placing a second order for $5,000.</p>
+          </blockquote>
+          <blockquote>
+            <span class="cue">(confirms, blocks)</span>
+            <span class="speaker">Partner</span>
+            <p>Neither order alone crosses $10,000. Together, they do — that's structuring: splitting one payment into pieces to dodge scrutiny. We catch the pattern, not just the transaction.</p>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Beat 3 — Three-Way Match <span class="num">3:00 – 3:45 · cut first if short</span></h2>
+    <div class="beat crit">
+      <div class="beat-head">
+        <div class="beat-title">Billed more than received</div>
+        <div class="beat-time">≈45 sec</div>
+      </div>
+      <div class="roles">
+        <span class="pill drive">Partner: drives</span>
+        <span class="pill narrate">You: narrates</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Invoicing → Vendors → Bills → search <code>Al Fahim</code></li>
+            <li>Open the draft bill on the rebar PO (no <code>AFT-</code> reference)</li>
+            <li>Click <code>Confirm</code> — it blocks live</li>
+            <li><code>Fraud Flags</code> tab → approve → <code>Confirm</code> again → posts</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote>
+            <span class="speaker">You</span>
+            <p>This bill charges for 20 units of steel rebar. Only 12 were ever logged as received.</p>
+          </blockquote>
+          <blockquote>
+            <span class="cue">(blocks)</span>
+            <span class="speaker">You</span>
+            <p>Billed 20, received 12 — the same three-way match real auditors run by hand, checking automatically before anything gets paid.</p>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Beat 4 — Benford's Law Audit <span class="num">3:45 – 4:45 · the technical beat</span></h2>
+    <div class="beat stat">
+      <div class="beat-head">
+        <div class="beat-title">Statistics, not machine learning</div>
+        <div class="beat-time">≈60 sec</div>
+      </div>
+      <div class="roles">
+        <span class="pill drive">You: drives</span>
+        <span class="pill narrate">Partner: narrates</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Contacts → search <code>Global Manufacturing Co</code></li>
+            <li><code>Vendor Risk</code> tab → click <code>Run Statistical Audit</code> — passes</li>
+            <li>Contacts → search <code>Roundtrip Supplies LLC</code></li>
+            <li><code>Vendor Risk</code> tab → click <code>Run Statistical Audit</code> — fails, live</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote>
+            <span class="speaker">Partner</span>
+            <p>This vendor has 40 posted bills. We run Benford's Law on them — the same forensic-accounting test real auditors use to catch fabricated numbers. Passes clean.</p>
+          </blockquote>
+          <blockquote>
+            <span class="cue">(second vendor fails)</span>
+            <span class="speaker">Partner</span>
+            <p>Same test, different vendor — its invoice amounts are suspiciously round. Fails live, with the actual statistical score on screen. No machine learning, no black box — pure math, so it can't hallucinate on us.</p>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Beat 5 — Trust Score + Ask VendorGuard <span class="num">4:45 – 5:30</span></h2>
+    <div class="beat info">
+      <div class="beat-head">
+        <div class="beat-title">The rollup, then the AI</div>
+        <div class="beat-time">≈45 sec</div>
+      </div>
+      <div class="roles">
+        <span class="pill drive">Partner: drives</span>
+        <span class="pill narrate">You: narrates</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>VendorGuard app → <code>Vendors at Risk</code> — sorted riskiest first</li>
+            <li>VendorGuard app → <code>Ask VendorGuard</code></li>
+            <li>Type: <i>"who's the riskiest vendor right now?"</i> → <code>Ask</code></li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote>
+            <span class="speaker">You</span>
+            <p>Every vendor gets a live trust score from everything we've seen — sorted riskiest first.</p>
+          </blockquote>
+          <blockquote>
+            <span class="speaker">You</span>
+            <p>And you can just ask. This is a real Claude call, grounded in our live data — it only answers from what's actually in the system, so it can't invent a vendor or a number that isn't real.</p>
+          </blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Close <span class="num">5:30 – 6:15</span></h2>
+    <div class="beat info">
+      <div class="beat-head">
+        <div class="beat-title">Why this holds up</div>
+        <div class="beat-time">≈45 sec</div>
+      </div>
+      <div class="beat-body" style="grid-template-columns: 1fr;">
+        <div class="say close-block">
+          <div class="close-line"><span class="speaker">You</span><p>Nine signals. Every one is a real, named fraud-examiner or forensic-accounting technique — not a buzzword.</p></div>
+          <div class="close-line"><span class="speaker">Partner</span><p>And we didn't just build the features — we ran multiple rounds of adversarial security review on our own tool, and found real bugs: an employee could've forged a fraud flag, a resolved flag could've masked a second, real one. A fraud-detection tool has to be trustworthy first.</p></div>
+          <div class="close-line"><span class="speaker">You</span><p>Kickback schemes and check tampering are on the roadmap — scoped out deliberately, not missed. That's VendorGuard. Thank you.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="tail">
+    Thresholds referenced above: structuring $10,000 / 30-day window · bank-swap recency 14 days · Benford nonconformity MAD &gt; 0.012. Reload the demo scenario between rehearsals — it's idempotent.
+  </footer>
+
+</div>
