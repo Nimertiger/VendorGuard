@@ -114,6 +114,25 @@
   .beat.crit { --stripe: var(--alert); }
   .beat.stat { --stripe: var(--gold); }
   .beat.info { --stripe: var(--brand); }
+  .beat.ref { --stripe: var(--ink-soft); }
+
+  .pill.ref { background: var(--mono-chip); color: var(--ink-soft); }
+
+  .explainer {
+    background: var(--gold-soft); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 20px; margin-top: 22px; font-size: .93rem;
+  }
+  .explainer h3 {
+    font-size: 1rem; font-weight: 600; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .explainer p { margin: 8px 0 0; }
+  .explainer p:first-of-type { margin-top: 0; }
+  .explainer .formula {
+    font-family: 'IBM Plex Mono', monospace; font-size: .88rem;
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 12px; margin: 10px 0; display: inline-block;
+  }
 
   .beat-head {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -186,7 +205,7 @@
     <div class="meta-row">
       <span>Target: <b>6–7 min</b></span>
       <span>Speakers: <b>YOU</b> / <b>PARTNER</b></span>
-      <span>Beats: <b>5</b></span>
+      <span>Beats: <b>5</b> timed + <b>4</b> reference</span>
     </div>
   </header>
 
@@ -380,6 +399,13 @@
         </div>
       </div>
     </div>
+    <div class="explainer">
+      <h3>How Benford's Law actually works</h3>
+      <p>In real, naturally-occurring numbers, the <b>first digit</b> isn't evenly distributed. Numbers starting with <b>1</b> show up ~30% of the time; numbers starting with <b>9</b> show up only ~4.6% of the time. This is a genuine mathematical fact — to grow from a leading 1 to a leading 2 takes 100% growth, but from 9 back to a leading 1 takes only 11%, so real quantities spend more of their "life" with a low leading digit.</p>
+      <p>People fabricating numbers don't reproduce this instinctively — faked or suspiciously round amounts (like Roundtrip's $500 / $1,000 / $1,500 pattern) come out closer to flat than curved. VendorGuard computes <b>MAD</b> (Mean Absolute Deviation) between a vendor's real leading-digit distribution and Benford's expected one:</p>
+      <div class="formula">MAD ≤ 0.012 → conforms · MAD &gt; 0.012 → flagged</div>
+      <p>and cross-checks with an independent chi-square goodness-of-fit test before flagging, so one noisy score alone doesn't cry wolf. Nigrini formalized this for forensic accounting — it's the same technique real auditors run, not something invented for this build.</p>
+    </div>
   </section>
 
   <section class="block">
@@ -429,6 +455,92 @@
           <div class="close-line"><span class="speaker">You</span><p>Nine signals. Every one is a real, named fraud-examiner or forensic-accounting technique — not a buzzword.</p></div>
           <div class="close-line"><span class="speaker">Partner</span><p>And we didn't just build the features — we ran multiple rounds of adversarial security review on our own tool, and found real bugs: an employee could've forged a fraud flag, a resolved flag could've masked a second, real one. A fraud-detection tool has to be trustworthy first.</p></div>
           <div class="close-line"><span class="speaker">You</span><p>Kickback schemes and check tampering are on the roadmap — scoped out deliberately, not missed. That's VendorGuard. Thank you.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Appendix — the other 4 signals <span class="num">not in the timed pitch — for Q&amp;A or a booth walkthrough</span></h2>
+    <p class="subhead" style="margin-bottom:0;">If a judge asks "what else does it catch," or you're demoing one-on-one after the pitch with no clock running, these are already seeded and ready — no live setup needed except Duplicate Bill.</p>
+
+    <div class="beat ref">
+      <div class="beat-head">
+        <div class="beat-title">Duplicate Bill</div>
+        <span class="pill ref">Hard block — the only one that raises an error dialog</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Invoicing → Vendors → Bills → <code>New</code></li>
+            <li>Vendor <code>Al Fahim Trading LLC</code>, reference <code>AFT-CLEAN-001</code>, amount <code>5000</code>, date <code>Aug 16</code> (matches the seeded clean bill exactly)</li>
+            <li>Try to save — errors immediately</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote><p>Same vendor, amount, reference and date as a bill we already have — the system won't even let you save it, let alone pay it twice.</p></blockquote>
+        </div>
+      </div>
+    </div>
+
+    <div class="beat ref">
+      <div class="beat-head">
+        <div class="beat-title">Lookalike Vendor</div>
+        <span class="pill ref">Already seeded — just point at it</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Dashboard → find <code>Al Fahim Tradng LLC</code> (note the missing "i")</li>
+            <li>Point at its <b>Lookalike Vendor</b> cell — already flagged</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote><p>One letter off from our real vendor. Impersonation attempts like this get caught the moment the vendor is created — fuzzy name-matching against everyone already on file.</p></blockquote>
+        </div>
+      </div>
+    </div>
+
+    <div class="beat ref">
+      <div class="beat-head">
+        <div class="beat-title">Ghost Vendor</div>
+        <span class="pill ref">Already seeded — just point at it</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Dashboard → find <code>Desert Rose Trading</code></li>
+            <li>Point at its <b>Ghost Vendor</b> cell — already flagged</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote><p>This vendor has posted bills but no tax ID and no bank account on file — the classic pattern for a shell company set up to receive one payment and vanish.</p></blockquote>
+        </div>
+      </div>
+    </div>
+
+    <div class="beat ref">
+      <div class="beat-head">
+        <div class="beat-title">Shared Bank Account</div>
+        <span class="pill ref">Already seeded — just point at it</span>
+      </div>
+      <div class="beat-body">
+        <div class="steps">
+          <h4>Steps</h4>
+          <ol>
+            <li>Dashboard → find <code>Sahara Logistics FZE</code></li>
+            <li>Point at its <b>Shared Bank Account</b> cell</li>
+          </ol>
+        </div>
+        <div class="say">
+          <h4>Say</h4>
+          <blockquote><p>This vendor and Al Fahim Trading LLC pay out to the identical bank account — two "different" vendors that are really the same entity, a classic collusion or shell-ring pattern.</p></blockquote>
         </div>
       </div>
     </div>
