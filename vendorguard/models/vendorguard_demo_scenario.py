@@ -263,6 +263,36 @@ class VendorguardDemoScenario(models.Model):
                          'country_id': ae.id if ae else False,
                          'email': 'billing@roundtripsupplies.ae', 'phone': '+971 4 556 7712'})
 
+        # --- Ghost vendor: posted bill, no VAT, no bank account on file. _post_bill seeds
+        # under vendorguard_seeding, which skips the check that would otherwise fire -- call
+        # it directly so this vendor shows up on the dashboard without relying on a live
+        # demo click to create the flag. ---
+        ghost_vendor = self._find_or_create_vendor(
+            'Desert Rose Trading', street='Al Rigga Road', city='Dubai',
+            country_id=ae.id if ae else False, email='accounts@desertrosetrading.ae')
+        ghost_ref = 'DRT-SEED-001'
+        ghost_bill = self.env['account.move'].search([
+            ('partner_id', '=', ghost_vendor.id), ('ref', '=', ghost_ref), ('state', '=', 'posted'),
+        ], limit=1)
+        if not ghost_bill:
+            # same-day reruns would otherwise hit the duplicate_bill hard constraint --
+            # that check doesn't skip under vendorguard_seeding the way the soft checks do
+            ghost_bill = self._post_bill(
+                ghost_vendor, 3200.0, ghost_ref, journal=journal,
+                description='Office Furniture — Bulk Order')
+        ghost_bill._check_ghost_vendor()
+
+        # --- Lookalike vendor: name is a near-match to Al Fahim Trading LLC, created without
+        # the skip-lookalike context so the check fires the same way it would for a real new
+        # vendor -- one letter off, hoping nobody notices before a payment goes out. ---
+        lookalike_marker = 'Al Fahim Tradng LLC'
+        if not self.env['res.partner'].search([('name', '=', lookalike_marker)], limit=1):
+            self.env['res.partner'].create({
+                'name': lookalike_marker, 'is_company': True, 'supplier_rank': 1,
+                'street': 'Al Quoz Industrial Area 4', 'city': 'Dubai',
+                'country_id': ae.id if ae else False,
+            })
+
         # No explicit commit here: the wizard button's own request cycle commits the
         # transaction on a successful return, same as any other Odoo button action --
         # an explicit mid-flow commit only gets in the way of testing this method.

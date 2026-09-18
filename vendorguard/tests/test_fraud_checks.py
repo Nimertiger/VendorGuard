@@ -629,6 +629,27 @@ class TestFraudChecks(TransactionCase):
         po2.button_confirm()
         self.assertEqual(po2.state, 'draft', "structuring must still fire after a reload")
 
+    def test_demo_scenario_seeds_ghost_and_lookalike_vendors_idempotently(self):
+        # every flag type should have a real seeded example so the dashboard shows actual
+        # data, not "N/A", for all nine signals -- and reloading twice same-day must not
+        # duplicate the seeded bill (duplicate_bill's hard constraint doesn't skip under
+        # vendorguard_seeding the way the soft checks do) or the flags it creates
+        scenario = self.env['vendorguard.demo.scenario'].create({})
+        scenario.action_load_demo_scenario()
+        scenario.action_load_demo_scenario()
+
+        ghost_vendor = self.env['res.partner'].search([('name', '=', 'Desert Rose Trading')], limit=1)
+        self.assertTrue(ghost_vendor)
+        ghost_flags = self.env['vendorguard.fraud.flag'].search([
+            ('partner_id', '=', ghost_vendor.id), ('flag_type', '=', 'ghost_vendor')])
+        self.assertEqual(len(ghost_flags), 1, "reload must not duplicate the ghost_vendor flag")
+
+        lookalike_vendor = self.env['res.partner'].search([('name', '=', 'Al Fahim Tradng LLC')], limit=1)
+        self.assertTrue(lookalike_vendor)
+        lookalike_flags = self.env['vendorguard.fraud.flag'].search([
+            ('partner_id', '=', lookalike_vendor.id), ('flag_type', '=', 'lookalike_vendor')])
+        self.assertEqual(len(lookalike_flags), 1)
+
     def test_reject_allowed_on_nonresolvable_flag(self):
         # Reject used to be blocked for non-resolvable (structural) flags exactly like
         # Approve, leaving no UI-exposed way to dismiss a stale/false-positive structural
