@@ -145,6 +145,24 @@ class VendorguardDemoScenario(models.Model):
         po_amount = STRUCTURING_THRESHOLD * 0.6
         demo_product = self._find_or_create_demo_product()
         structuring_po_marker = 'Cement Bulk Order — Batch 1'
+        twm_marker = 'Steel Rebar Delivery — Site B'
+        # Any other confirmed PO for this vendor -- left over from an earlier rehearsal,
+        # manual testing, or a fumbled live attempt at the structuring beat -- silently
+        # pollutes the structuring check's rolling 30-day total. Worse, if any stray PO is
+        # itself larger than the threshold, "no single PO alone exceeded it" becomes false
+        # forever, permanently disabling the detector for this vendor. Cancelling anything
+        # outside our two known markers keeps every reload a genuinely clean slate; state
+        # filters to 'purchase' on the detector's own search, so cancelling is enough --
+        # no need to also unlink (and unlinking a PO with downstream bills can raise).
+        known_po_markers = {structuring_po_marker, twm_marker}
+        stray_pos = self.env['purchase.order'].search([
+            ('partner_id', '=', vendor.id), ('state', '=', 'purchase'),
+        ]).filtered(lambda p: not (set(p.order_line.mapped('name')) & known_po_markers))
+        if stray_pos:
+            try:
+                stray_pos.button_cancel()
+            except Exception:
+                pass  # a stray PO with downstream documents -- leave it, not worth failing the load
         po = self.env['purchase.order'].search([
             ('partner_id', '=', vendor.id), ('order_line.name', '=', structuring_po_marker),
         ], limit=1)
@@ -164,7 +182,6 @@ class VendorguardDemoScenario(models.Model):
         # --- Three-way match demo: PO for 20 units, only 12 recorded as received, ordered-policy
         # billing lets a bill go out for the full 20 anyway — the live "Post" click blocks on it. ---
         twm_product = self._find_or_create_twm_product()
-        twm_marker = 'Steel Rebar Delivery — Site B'
         # Once a bill posts, deleting it hits the same accounting sequence-chain integrity
         # rule as the Benford seed bills (see _seed_benford_vendor) -- rather than fight it,
         # reuse a PO for this beat only while it has no posted bill against it yet; once the

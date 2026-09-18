@@ -597,6 +597,38 @@ class TestFraudChecks(TransactionCase):
         self.env['vendorguard.demo.scenario'].with_user(self.clerk_user).create({}) \
             .action_load_demo_scenario()
 
+    def test_demo_scenario_reload_cancels_stray_purchase_orders(self):
+        # a stray confirmed PO left over from manual rehearsal/testing silently pollutes
+        # the structuring detector's rolling total -- and if the stray PO is itself larger
+        # than the threshold, permanently disables detection for that vendor ("no single PO
+        # alone exceeded it" becomes false forever). Reloading the demo scenario must clean
+        # this up so the live structuring beat keeps working across repeated rehearsals.
+        scenario = self.env['vendorguard.demo.scenario'].create({})
+        scenario.action_load_demo_scenario()
+        vendor = self.env['res.partner'].search([('name', '=', 'Al Fahim Trading LLC')], limit=1)
+        stray = self.env['purchase.order'].create({
+            'partner_id': vendor.id,
+            'order_line': [(0, 0, {
+                'product_id': self.product.id, 'name': 'accidental huge test order',
+                'product_qty': 1, 'price_unit': 999999.0})],
+        })
+        stray.button_confirm()
+        self.assertEqual(stray.state, 'purchase')
+
+        scenario.action_load_demo_scenario()
+        self.assertEqual(stray.state, 'cancel', "reload must cancel a stray confirmed PO")
+
+        # with the stray gone, structuring must still be detectable: confirm a second real
+        # order for the vendor and it must block
+        po2 = self.env['purchase.order'].create({
+            'partner_id': vendor.id,
+            'order_line': [(0, 0, {
+                'product_id': self.product.id, 'name': 'second live order',
+                'product_qty': 1, 'price_unit': 5000.0})],
+        })
+        po2.button_confirm()
+        self.assertEqual(po2.state, 'draft', "structuring must still fire after a reload")
+
     def test_reject_allowed_on_nonresolvable_flag(self):
         # Reject used to be blocked for non-resolvable (structural) flags exactly like
         # Approve, leaving no UI-exposed way to dismiss a stale/false-positive structural

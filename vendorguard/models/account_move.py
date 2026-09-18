@@ -96,7 +96,12 @@ class AccountMove(models.Model):
             ('partner_id', '=', self.partner_id.id),
             ('company_id', '=', self.company_id.id),
             ('change_date', '>=', fields.Datetime.now() - relativedelta(days=BANK_CHANGE_RECENT_DAYS)),
-        ], limit=1, order='change_date desc')
+        ], limit=1, order='change_date desc, id desc')
+        # id desc as a tiebreaker: two swaps written close enough together can land on the
+        # same change_date (some platforms' clock resolution is coarser than the gap between
+        # two back-to-back writes), which makes "order by change_date desc" alone pick an
+        # arbitrary one of the tied rows -- id is monotonically increasing by insertion order
+        # regardless of clock resolution, so it's the reliable way to break the tie.
         # "already flagged" here means "a flag already covers *this specific* change-log
         # record," not just "a bank_swap flag exists at all" for this bill -- keying on
         # flag_type alone let a bank swap that happened after an earlier one was reviewed
