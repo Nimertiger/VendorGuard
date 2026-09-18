@@ -3,6 +3,7 @@ import math
 from collections import Counter
 
 from dateutil.relativedelta import relativedelta
+from markupsafe import Markup, escape
 
 from odoo import _, api, fields, models
 
@@ -14,6 +15,24 @@ from .vendorguard_constants import (
     LOOKALIKE_SIMILARITY_THRESHOLD,
     SEVERITY_SCORE_PENALTY,
 )
+
+# Ordered so the dashboard card grid always lists all nine signals in the same
+# place, showing "N/A" for any this vendor has never triggered.
+DASHBOARD_FLAG_TYPES = [
+    ('duplicate_bill', 'Duplicate Bill'),
+    ('bank_swap', 'Bank Account Swap'),
+    ('structuring', 'Structuring'),
+    ('lookalike_vendor', 'Lookalike Vendor'),
+    ('segregation_of_duties', 'Segregation of Duties'),
+    ('benford_anomaly', 'Benford Anomaly'),
+    ('ghost_vendor', 'Ghost Vendor'),
+    ('three_way_match', 'Three-Way Match'),
+    ('shared_bank_account', 'Shared Bank Account'),
+]
+DASHBOARD_SEVERITY_RANK = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
+DASHBOARD_SEVERITY_COLOR = {'critical': '#8C2F2F', 'high': '#8C2F2F', 'medium': '#8A6A1F', 'low': '#3A6EA5'}
+DASHBOARD_TIER_COLOR = {'safe': '#1B6B43', 'watch': '#8A6A1F', 'high_risk': '#8C2F2F'}
+DASHBOARD_TIER_LABEL = {'safe': 'SAFE', 'watch': 'WATCH', 'high_risk': 'HIGH RISK'}
 
 
 def _benford_expected_first_digit_distribution():
@@ -31,6 +50,7 @@ class ResPartner(models.Model):
         ('watch', 'Watch'),
         ('high_risk', 'High Risk'),
     ], compute='_compute_trust_score', store=True)
+    vendorguard_dashboard_html = fields.Html(compute='_compute_vendorguard_dashboard_html', sanitize=False)
 
     @api.depends('fraud_flag_ids.state', 'fraud_flag_ids.severity', 'bank_change_log_ids.change_date')
     def _compute_trust_score(self):
@@ -50,6 +70,55 @@ class ResPartner(models.Model):
                 partner.trust_tier = 'watch'
             else:
                 partner.trust_tier = 'high_risk'
+
+    @api.depends('fraud_flag_ids.flag_type', 'fraud_flag_ids.severity', 'trust_score', 'trust_tier', 'name')
+    def _compute_vendorguard_dashboard_html(self):
+        """Builds the dashboard card's inner markup server-side: a per-vendor grid of all
+        nine signals, real counts where a signal has fired, "N/A" where it never has. A
+        stock pivot table renders that same "never happened" case as a blank cell, which
+        reads as broken rather than as an explicit answer -- this dashboard never leaves
+        that ambiguous."""
+        for partner in self:
+            by_type = {}
+            for flag in partner.fraud_flag_ids:
+                by_type.setdefault(flag.flag_type, []).append(flag)
+
+            cells = []
+            for ftype, label in DASHBOARD_FLAG_TYPES:
+                flags = by_type.get(ftype)
+                if not flags:
+                    cells.append(
+                        '<div style="background:color-mix(in srgb, currentColor 6%%, transparent);'
+                        'border-radius:8px;padding:7px 9px;">'
+                        '<div style="font-size:10px;color:#888;line-height:1.3;">%s</div>'
+                        '<div style="font-size:14px;font-weight:600;color:#999;">N/A</div>'
+                        '</div>' % escape(label))
+                else:
+                    worst = max(flags, key=lambda f: DASHBOARD_SEVERITY_RANK.get(f.severity, 0))
+                    color = DASHBOARD_SEVERITY_COLOR.get(worst.severity, '#3A6EA5')
+                    cells.append(
+                        '<div style="background:color-mix(in srgb, %s 12%%, transparent);'
+                        'border-radius:8px;padding:7px 9px;">'
+                        '<div style="font-size:10px;color:#888;line-height:1.3;">%s</div>'
+                        '<div style="font-size:16px;font-weight:700;color:%s;">%d</div>'
+                        '</div>' % (color, escape(label), color, len(flags)))
+
+            tier_color = DASHBOARD_TIER_COLOR.get(partner.trust_tier, '#3A6EA5')
+            tier_label = DASHBOARD_TIER_LABEL.get(partner.trust_tier, '')
+            partner.vendorguard_dashboard_html = Markup(
+                '<div style="font-family:inherit;">'
+                '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+                '<div style="font-weight:600;font-size:15px;flex:1;min-width:0;overflow:hidden;'
+                'text-overflow:ellipsis;white-space:nowrap;">%s</div>'
+                '<div style="font-family:ui-monospace,monospace;font-weight:700;font-size:19px;'
+                'color:%s;">%d</div>'
+                '<div style="font-size:10px;font-weight:700;letter-spacing:.04em;color:#fff;'
+                'background:%s;padding:3px 9px;border-radius:999px;white-space:nowrap;">%s</div>'
+                '</div>'
+                '<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;">%s</div>'
+                '</div>'
+            ) % (escape(partner.name or ''), tier_color, partner.trust_score, tier_color,
+                 tier_label, Markup(''.join(cells)))
 
     def _cron_recompute_trust_scores(self):
         # trust_score is a stored compute keyed on bank_change_log_ids.change_date, which

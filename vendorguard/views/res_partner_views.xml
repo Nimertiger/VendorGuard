@@ -78,4 +78,30 @@
         <field name="view_id" ref="vendorguard_vendors_at_risk_view_list"/>
         <field name="domain">[('is_company','=',True),('supplier_rank','&gt;',0)]</field>
     </record>
+
+    <record id="vendorguard_dashboard_view_kanban" model="ir.ui.view">
+        <field name="name">vendorguard.dashboard.view.kanban</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <kanban create="false" edit="false" class="o_kanban_dashboard" records_draggable="false">
+                <field name="vendorguard_dashboard_html"/>
+                <templates>
+                    <t t-name="card">
+                        <div style="padding:10px;">
+                            <t t-out="record.vendorguard_dashboard_html.raw_value"/>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="vendorguard_dashboard_action" model="ir.actions.act_window">
+        <field name="name">Dashboard</field>
+        <field name="res_model">res.partner</field>
+        <field name="view_mode">kanban</field>
+        <field name="view_id" ref="vendorguard_dashboard_view_kanban"/>
+        <field name="domain">[('is_company','=',True),('supplier_rank','&gt;',0)]</field>
+        <field name="context">{'search_default_nothing': 1}</field>
+    </record>
 </odoo>
